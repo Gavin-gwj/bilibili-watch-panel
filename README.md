@@ -39,6 +39,25 @@ https://github.com/Gavin-gwj/bilibili-watch-panel
 
 ---
 
+## 界面截图
+
+脚本会在 B 站页面右侧显示粉色浮动按钮，点击后打开观看数据面板：
+
+![B 站页面中的面板入口](./docs/screenshots/entry-button.png)
+
+面板按使用场景分为四个 Tab：
+
+| Tab | 截图 | 可以看到什么 |
+| --- | --- | --- |
+| 今日 | ![今日数据面板](./docs/screenshots/panel-today.png) | 今日总时长、观看视频数、活跃时段、UP 主分布和当天记录 |
+| 本周 | ![本周数据面板](./docs/screenshots/panel-week.png) | 近 7 天时长趋势、连续观看天数和本周 Top5 UP 主 |
+| 全部 | ![全部数据面板](./docs/screenshots/panel-all.png) | 累计统计、近一年热力图、搜索和完整观看记录 |
+| 报告 | ![本周使用报告](./docs/screenshots/panel-report.png) | 本周总览、最爱 UP 主、每日时长图表和导出入口 |
+
+截图中的数据来自本机浏览器示例，仅用于展示界面；实际内容会随着你的观看记录变化。
+
+---
+
 ## 功能说明
 
 ### 1. 个人观看数据面板
