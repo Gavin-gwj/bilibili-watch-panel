@@ -1,17 +1,19 @@
 // ==UserScript==
 // @name         Bilibili Watch Panel
 // @namespace    https://github.com/Gavin-gwj/bilibili-watch-panel
-// @version      0.2.1
+// @version      0.3.0
 // @description  本地B站观看数据统计与可视化面板
 // @author       Gavin-gwj
 // @match        https://*.bilibili.com/*
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_deleteValue
-// @grant        GM_addStyle
+// @noframes
 // @require      https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js
 // @require      https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js
 // @run-at       document-idle
+// @updateURL    https://raw.githubusercontent.com/Gavin-gwj/bilibili-watch-panel/main/bilibili-watch-panel.user.js
+// @downloadURL  https://raw.githubusercontent.com/Gavin-gwj/bilibili-watch-panel/main/bilibili-watch-panel.user.js
 // @license      MIT
 // ==/UserScript==
 
@@ -70,6 +72,8 @@
       DEBUG: 'debug',
       SCHEMA: 'schemaVersion',
       REMINDER: 'lastReminderWeek',
+      ARCHIVE_NOTICE: 'archiveNotice',
+      FAB_POS: 'fabPos',
     },
     /** 当前数据结构版本 */
     SCHEMA_VERSION: 1,
@@ -328,11 +332,23 @@
         GM_deleteValue(CONFIG.KEYS.RECORDS);
         GM_deleteValue(CONFIG.KEYS.ARCHIVE);
         GM_deleteValue(CONFIG.KEYS.VIDEO_CACHE);
+        GM_deleteValue(CONFIG.KEYS.ARCHIVE_NOTICE);
         log('数据已清空');
         return true;
       } catch (err) {
         logError('Store.clearAll', err);
         return false;
+      }
+    },
+
+    /** 归档裁剪提示（读取后不清除，用户可自行导出备份） */
+    getArchiveNotice() {
+      try {
+        const raw = GM_getValue(CONFIG.KEYS.ARCHIVE_NOTICE, null);
+        return raw && typeof raw === 'object' && Number(raw.dropped) > 0 ? raw : null;
+      } catch (err) {
+        logError('Store.getArchiveNotice', err);
+        return null;
       }
     },
 
@@ -682,7 +698,7 @@
       window.addEventListener('popstate', onUrlChange);
       window.addEventListener('pushstate', onUrlChange);
       window.addEventListener('replacestate', onUrlChange);
-      setInterval(onUrlChange, 2000);
+      // 轮询兜底统一由 Bootstrap 的路由守护负责，这里不再另起定时器
 
       log('采集事件已绑定');
     },
@@ -870,9 +886,16 @@
       const moveOut = records.slice(CONFIG.ARCHIVE_KEEP);
       const archive = Store.getArchive().concat(moveOut);
       archive.sort(function (a, b) { return (b.lastActive || 0) - (a.lastActive || 0); });
+      const archived = archive.slice(0, CONFIG.ARCHIVE_MAX);
+      const dropped = archive.length - archived.length;
       Store.setRecords(keep);
-      Store.setArchive(archive.slice(0, CONFIG.ARCHIVE_MAX));
-      log('归档完成：主 ' + keep.length + ' 条，归档 ' + Math.min(archive.length, CONFIG.ARCHIVE_MAX) + ' 条');
+      Store.setArchive(archived);
+      if (dropped > 0) {
+        // 归档已满：最旧记录被裁剪，显式提示而不是静默丢弃
+        logError('archiveIfNeeded', '归档已达上限，裁剪最旧 ' + dropped + ' 条记录');
+        try { GM_setValue(CONFIG.KEYS.ARCHIVE_NOTICE, { at: Date.now(), dropped: dropped }); } catch (err) { /* 忽略 */ }
+      }
+      log('归档完成：主 ' + keep.length + ' 条，归档 ' + archived.length + ' 条');
     } catch (err) {
       logError('archiveIfNeeded', err);
     }
@@ -968,20 +991,80 @@
       };
     },
 
-    /** 全部汇总 */
-    all() {
+    /** 全部汇总；query 非空时按标题 / UP 主过滤（大小写不敏感） */
+    all(query) {
       const list = this.allRecords();
       const uploaders = Object.create(null);
       list.forEach(function (r) { uploaders[r.uploader || '未知UP主'] = 1; });
-      const recent = list.slice()
-        .sort(function (a, b) { return (b.lastActive || 0) - (a.lastActive || 0); })
-        .slice(0, 20);
+      const q = String(query || '').trim().toLowerCase();
+      const matched = q ? list.filter(function (r) {
+        return String(r.videoTitle || '').toLowerCase().indexOf(q) >= 0
+          || String(r.uploader || '').toLowerCase().indexOf(q) >= 0
+          || String(r.bvid || '').toLowerCase().indexOf(q) >= 0;
+      }) : list;
+      const recent = matched.slice()
+        .sort(function (a, b) { return (b.lastActive || 0) - (a.lastActive || 0); });
       return {
         seconds: sumSeconds(list),
         count: list.length,
         uploaderCount: Object.keys(uploaders).length,
-        recent: recent,
+        matchedCount: matched.length,
+        query: q,
+        recent: recent.slice(0, 100),
       };
+    },
+
+    /** 连续观看天数（从今天向前连续有记录的天数） */
+    streak() {
+      const dates = Object.create(null);
+      this.allRecords().forEach(function (r) { if (r.date) dates[r.date] = 1; });
+      let n = 0;
+      const d = new Date();
+      while (dates[formatDate(d)]) {
+        n++;
+        d.setDate(d.getDate() - 1);
+      }
+      return n;
+    },
+
+    /** 本周 vs 上周总时长环比 */
+    weekOverWeek() {
+      const records = Store.getRecords();
+      const now = new Date();
+      const prevDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+      const thisWeek = sumSeconds(records.filter(function (r) { return isSameIsoWeek(r.date, now); }));
+      const lastWeek = sumSeconds(records.filter(function (r) { return isSameIsoWeek(r.date, prevDate); }));
+      let delta = 0;
+      if (lastWeek > 0) delta = (thisWeek - lastWeek) / lastWeek * 100;
+      else if (thisWeek > 0) delta = 100;
+      return { thisWeek: thisWeek, lastWeek: lastWeek, delta: delta, hasLast: lastWeek > 0 };
+    },
+
+    /** 近一年每日观看热力图（周一为列首，共 53 周 × 7 天） */
+    heatmap() {
+      const daily = Object.create(null);
+      this.allRecords().forEach(function (r) {
+        if (!r.date) return;
+        daily[r.date] = (daily[r.date] || 0) + (Number(r.watchedSeconds) || 0);
+      });
+      const today = new Date();
+      const start = startOfWeek(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 364));
+      const todayStr = formatDate(today);
+      const cells = [];
+      for (let w = 0; w < 53; w++) {
+        const col = [];
+        for (let d = 0; d < 7; d++) {
+          const cur = new Date(start.getFullYear(), start.getMonth(), start.getDate() + w * 7 + d);
+          const date = formatDate(cur);
+          const future = date > todayStr;
+          const sec = daily[date] || 0;
+          let level = 0;
+          if (sec > 0) level = sec < 900 ? 1 : (sec < 2700 ? 2 : (sec < 7200 ? 3 : 4));
+          col.push({ date: date, seconds: sec, level: future ? -1 : level });
+        }
+        cells.push(col);
+      }
+      return cells;
     },
 
     /** 本周报告数据（周一为一周起点） */
@@ -1015,6 +1098,7 @@
           + (peak ? '最常在' + peak + '打开B站' : '观看时段较分散')
           + (fav ? '，最爱「' + fav + '」' : '') + '。';
       }
+      const wow = Stats.weekOverWeek();
       return {
         weekKey: weekKey(now),
         totalSeconds: sumSeconds(weekRecords),
@@ -1024,6 +1108,8 @@
         slots: slots,
         peakSlot: peak,
         summary: summary,
+        streak: Stats.streak(),
+        wow: wow,
       };
     },
   };
@@ -1100,7 +1186,8 @@
     '.bwp-card .lbl { margin-top: 5px; font-size: 11.5px; color: #9499a0; }',
     '.bwp-card.compact .num { font-size: 15px; letter-spacing: .01em; }',
     '.bwp-cards-3 .bwp-card { padding: 12px 11px; }',
-    '.bwp-cards-3 .bwp-card .num { font-size: 17px; }',
+    '.bwp-cards-3 .bwp-card .lbl { font-size: 10.5px; }',
+    '.bwp-cards-3 .bwp-card .num { font-size: 15.5px; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }',
     '.bwp-sub { display: flex; align-items: center; gap: 6px; margin: 4px 0 8px; font-size: 12px; font-weight: 600; color: #61666d; letter-spacing: .02em; }',
     '.bwp-sub::before { content: ""; width: 3px; height: 12px; border-radius: 2px; background: linear-gradient(180deg,#fb7299,#ff9db8); }',
     '.bwp-chart { position: relative; height: 200px; margin-bottom: 16px; padding: 10px 6px 4px; background: #fff; border: 1px solid #f2f3f5; border-radius: 15px; box-shadow: 0 2px 10px rgba(97,102,109,.05); }',
@@ -1131,6 +1218,31 @@
     /* ---------- 小屏适配与动效偏好 ---------- */
     '@media (max-width: 480px) { .bwp-panel { width: 100vw; max-width: 100vw; border-radius: 0; } .bwp-tabs { margin: 12px 12px 0; } .bwp-body { padding: 14px 12px 18px; } .bwp-cards-3 .bwp-card .num { font-size: 15.5px; } .bwp-cards-3 .bwp-card { padding: 11px 9px; } }',
     '@media (prefers-reduced-motion: reduce) { .bwp-fab, .bwp-panel, .bwp-tab, .bwp-btn, .bwp-item, .bwp-close { transition: none; } .bwp-close:hover { transform: none; } }',
+    /* ---------- 归档提示条 ---------- */
+    '.bwp-notice { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; padding: 9px 11px; border-radius: 12px; border: 1px solid #ffdce8; background: #fff7fa; font-size: 11px; line-height: 1.55; color: #b84466; }',
+    '.bwp-notice button { flex: none; margin-left: auto; border: none; background: transparent; color: #e8578a; font-size: 14px; line-height: 1; cursor: pointer; padding: 0 2px; }',
+    /* ---------- 搜索框 ---------- */
+    '.bwp-search { display: flex; align-items: center; gap: 8px; height: 36px; margin-bottom: 10px; padding: 0 12px; border-radius: 12px; border: 1px solid #f0f1f3; background: #fff; transition: border-color .18s ease, box-shadow .18s ease; }',
+    '.bwp-search:focus-within { border-color: #ffd0dd; box-shadow: 0 0 0 3px rgba(251,114,153,.1); }',
+    '.bwp-search svg { flex: none; width: 15px; height: 15px; color: #9499a0; }',
+    '.bwp-search input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font-size: 12.5px; color: #18191c; }',
+    '.bwp-search input::placeholder { color: #c9ccd1; }',
+    '.bwp-rec-hint { margin: 0 0 8px; font-size: 10.5px; color: #9499a0; }',
+    /* ---------- 年度热力图 ---------- */
+    '.bwp-heat { display: flex; gap: 2px; align-items: flex-start; margin: 2px 0 6px; }',
+    '.bwp-heat-col { display: flex; flex: 1; flex-direction: column; gap: 2px; }',
+    '.bwp-heat-cell { display: block; width: 100%; aspect-ratio: 1 / 1; border-radius: 2px; background: #f2f3f5; }',
+    '.bwp-heat-cell.lv1 { background: #ffe0ea; }',
+    '.bwp-heat-cell.lv2 { background: #ffbcd0; }',
+    '.bwp-heat-cell.lv3 { background: #fb7299; }',
+    '.bwp-heat-cell.lv4 { background: #d9436f; }',
+    '.bwp-heat-cell.future { background: transparent; }',
+    '.bwp-heat-legend { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: 0 0 12px; font-size: 10px; color: #9499a0; }',
+    '.bwp-heat-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: #f2f3f5; }',
+    '.bwp-heat-legend i.lv1 { background: #ffe0ea; } .bwp-heat-legend i.lv2 { background: #ffbcd0; } .bwp-heat-legend i.lv3 { background: #fb7299; } .bwp-heat-legend i.lv4 { background: #d9436f; }',
+    /* ---------- 次级按钮 ---------- */
+    '.bwp-btn.ghost { background: #fff; color: #61666d; border-color: #e3e5e7; box-shadow: none; }',
+    '.bwp-btn.ghost:hover { color: #e8578a; border-color: #ffd6e2; background: #fffafc; box-shadow: 0 4px 12px rgba(251,114,153,.12); }',
     '</style>',
     '<button class="bwp-fab" title="B站观看数据面板" aria-label="打开B站观看数据面板">',
     '  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M2 20h20"/></svg>',
@@ -1149,8 +1261,9 @@
     '  <nav class="bwp-tabs"></nav>',
     '  <div class="bwp-body"></div>',
     '  <footer class="bwp-footer">',
-    '    <button class="bwp-btn" data-act="export">导出 JSON</button>',
-    '    <button class="bwp-btn danger" data-act="clear">清空数据</button>',
+    '    <button class="bwp-btn" data-act="export">导出JSON</button>',
+    '    <button class="bwp-btn ghost" data-act="import">导入JSON</button>',
+    '    <button class="bwp-btn danger" data-act="clear">清空</button>',
     '  </footer>',
     '</aside>',
   ].join('\n');
@@ -1161,6 +1274,7 @@
     el: {},
     charts: {},
     current: '今日',
+    allQuery: '',
     open: false,
     mounted: false,
 
@@ -1241,6 +1355,7 @@
       this.el.footer.addEventListener('click', function (e) {
         const act = e.target && e.target.dataset ? e.target.dataset.act : '';
         if (act === 'export') self.exportJSON();
+        if (act === 'import') self.importJSON();
         if (act === 'clear') self.clearAll();
       });
       // ESC 关闭
@@ -1258,7 +1373,7 @@
       const self = this;
       let dragging = false, moved = false, startX = 0, startY = 0;
       try {
-        const saved = GM_getValue('fabPos', null);
+        const saved = GM_getValue(CONFIG.KEYS.FAB_POS, null);
         if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) self.placeFab(saved.x, saved.y);
       } catch (err) { /* 位置读取失败用默认值 */ }
 
@@ -1304,7 +1419,7 @@
       fab.style.right = 'auto';
       fab.style.bottom = 'auto';
       if (persist) {
-        try { GM_setValue('fabPos', { x: nx, y: ny }); } catch (err) { /* 忽略 */ }
+        try { GM_setValue(CONFIG.KEYS.FAB_POS, { x: nx, y: ny }); } catch (err) { /* 忽略 */ }
       }
     },
 
@@ -1390,11 +1505,17 @@
     /** 本周 Tab */
     renderWeek() {
       const data = Stats.week();
+      const wow = Stats.weekOverWeek();
+      const streak = Stats.streak();
+      const deltaText = wow.hasLast
+        ? (wow.delta >= 0 ? '▲+' : '▼') + Math.abs(Math.round(wow.delta)) + '%'
+        : '—';
       this.el.body.appendChild(this.cards([
         { num: formatDuration(data.totalSeconds), lbl: '近7天总时长' },
-        { num: data.weekKey, lbl: '本周（周一起）', compact: true },
+        { num: streak > 0 ? streak + '天' : '0天', lbl: '连续观看' },
+        { num: deltaText, lbl: '环比上周' },
       ]));
-      this.el.body.appendChild(this.subTitle('近 7 天每日时长'));
+      this.el.body.appendChild(this.subTitle('近 7 天每日时长 · ' + data.weekKey));
       this.el.body.appendChild(this.chartBox('weekDaily'));
       this.makeChart('weekDaily', {
         type: 'line',
@@ -1431,16 +1552,43 @@
       });
     },
 
-    /** 全部 Tab */
+    /** 全部 Tab：归档提示 + 年度热力图 + 记录搜索 */
     renderAll() {
-      const data = Stats.all();
+      const self = this;
+      const data = Stats.all(this.allQuery);
       if (data.count === 0) { this.empty('还没有任何观看记录'); return; }
       this.el.body.appendChild(this.cards([
         { num: formatDuration(data.seconds), lbl: '累计总时长' },
         { num: String(data.count), lbl: '总视频数' },
         { num: String(data.uploaderCount), lbl: '覆盖UP主' },
       ]));
-      this.el.body.appendChild(this.subTitle('最近 20 条观看记录'));
+
+      this.el.body.appendChild(this.archiveNotice());
+
+      this.el.body.appendChild(this.subTitle('近一年观看热力图'));
+      this.el.body.appendChild(this.heatmapNode());
+
+      this.el.body.appendChild(this.subTitle('观看记录'));
+      const search = this.searchBox(function (value) {
+        self.allQuery = value;
+        self.destroyCharts();
+        self.render();
+        const input = self.el.body.querySelector('.bwp-search input');
+        if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+      });
+      this.el.body.appendChild(search);
+
+      const hint = document.createElement('div');
+      hint.className = 'bwp-rec-hint';
+      hint.textContent = data.query
+        ? '匹配 ' + data.matchedCount + ' 条，最多显示 100 条'
+        : '共 ' + data.count + ' 条，按最近观看排序，最多显示 100 条';
+      this.el.body.appendChild(hint);
+
+      if (data.recent.length === 0) {
+        this.el.body.appendChild(this.emptyNode('没有匹配的记录'));
+        return;
+      }
       const list = document.createElement('div');
       list.className = 'bwp-list';
       data.recent.forEach(function (r, i) {
@@ -1455,7 +1603,7 @@
         const left = document.createElement('span');
         left.textContent = (r.uploader || '未知UP主') + ' · ' + formatDuration(r.watchedSeconds);
         const right = document.createElement('span');
-        right.textContent = r.date;
+        right.textContent = r.date + (r.openCount > 1 ? ' · 打开' + r.openCount + '次' : '');
         m.appendChild(left); m.appendChild(right);
         item.appendChild(t); item.appendChild(m);
         list.appendChild(item);
@@ -1497,6 +1645,76 @@
       const cv = document.createElement('canvas');
       cv.id = id;
       box.appendChild(cv);
+      return box;
+    },
+
+    /** 归档已达上限提示条；无提示返回空节点 */
+    archiveNotice() {
+      const notice = Store.getArchiveNotice();
+      if (!notice) { const f = document.createDocumentFragment(); return f; }
+      const el = document.createElement('div');
+      el.className = 'bwp-notice';
+      const txt = document.createElement('span');
+      txt.textContent = '归档已达上限，已裁剪最早的 ' + Number(notice.dropped) + ' 条记录（' + formatDate(new Date(notice.at || Date.now())) + '）。建议先导出 JSON 备份。';
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.textContent = '×';
+      x.setAttribute('aria-label', '关闭提示');
+      x.addEventListener('click', function () { el.remove(); });
+      el.appendChild(txt); el.appendChild(x);
+      return el;
+    },
+
+    /** 年度热力图（53 周 × 7 天，纯 DOM 无需图表库） */
+    heatmapNode() {
+      const weeks = Stats.heatmap();
+      const wrap = document.createElement('div');
+      wrap.className = 'bwp-anim';
+      const grid = document.createElement('div');
+      grid.className = 'bwp-heat';
+      weeks.forEach(function (col) {
+        const c = document.createElement('div');
+        c.className = 'bwp-heat-col';
+        col.forEach(function (day) {
+          const cell = document.createElement('i');
+          cell.className = 'bwp-heat-cell'
+            + (day.level < 0 ? ' future' : (day.level > 0 ? ' lv' + day.level : ''));
+          cell.title = day.level < 0
+            ? day.date + ' · 未到'
+            : day.date + ' · ' + (day.seconds > 0 ? formatDuration(day.seconds) : '无记录');
+          c.appendChild(cell);
+        });
+        grid.appendChild(c);
+      });
+      wrap.appendChild(grid);
+      const legend = document.createElement('div');
+      legend.className = 'bwp-heat-legend';
+      const label0 = document.createElement('span'); label0.textContent = '少';
+      legend.appendChild(label0);
+      [1, 2, 3, 4].forEach(function (lv) {
+        const i = document.createElement('i');
+        i.className = 'lv' + lv;
+        legend.appendChild(i);
+      });
+      const label1 = document.createElement('span'); label1.textContent = '多';
+      legend.appendChild(label1);
+      wrap.appendChild(legend);
+      return wrap;
+    },
+
+    /** 记录搜索框 */
+    searchBox(onInput) {
+      const box = document.createElement('div');
+      box.className = 'bwp-search';
+      const icon = document.createElement('span');
+      icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
+      const input = document.createElement('input');
+      input.type = 'search';
+      input.placeholder = '搜索视频标题 / UP 主 / BV 号';
+      input.value = this.allQuery || '';
+      const onChange = debounce(function () { onInput(input.value); }, 220);
+      input.addEventListener('input', onChange);
+      box.appendChild(icon); box.appendChild(input);
       return box;
     },
 
@@ -1586,6 +1804,86 @@
         log('已导出 JSON 备份');
       } catch (err) {
         logError('Panel.exportJSON', err);
+      }
+    },
+
+    /** 导入 JSON 备份：按「日期 + bvid」合并，重复条目取较大时长 */
+    importJSON() {
+      try {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json,application/json';
+        input.style.display = 'none';
+        input.addEventListener('change', function () {
+          const file = input.files && input.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = function () {
+            Panel._applyImport(String(reader.result || ''), file.name);
+          };
+          reader.onerror = function () { window.alert('文件读取失败，请重试。'); };
+          reader.readAsText(file, 'utf-8');
+        });
+        document.body.appendChild(input);
+        input.click();
+        setTimeout(function () { if (input.parentNode) input.parentNode.removeChild(input); }, 1000);
+      } catch (err) {
+        logError('Panel.importJSON', err);
+      }
+    },
+
+    /** 解析并合并导入内容（供 importJSON 回调复用） */
+    _applyImport(text, filename) {
+      try {
+        let payload = null;
+        try { payload = JSON.parse(text); } catch (err) { payload = null; }
+        if (!payload || typeof payload !== 'object') {
+          window.alert('导入失败：文件不是有效的 JSON 备份。');
+          return;
+        }
+        const incoming = []
+          .concat(Array.isArray(payload.watchRecords) ? payload.watchRecords : [])
+          .concat(Array.isArray(payload.watchRecordsArchive) ? payload.watchRecordsArchive : []);
+        const valid = incoming.map(sanitizeRecord).filter(Boolean);
+        if (valid.length === 0) {
+          window.alert('导入失败：没有找到合法的观看记录。');
+          return;
+        }
+        if (!window.confirm('即将导入 ' + valid.length + ' 条记录，与现有数据合并（同一天同一视频保留时长较大者）。确认继续？')) return;
+
+        const merged = Store.getRecords();
+        const index = Object.create(null);
+        merged.forEach(function (r, i) { index[r.date + '|' + r.bvid] = i; });
+        let added = 0, updated = 0;
+        valid.forEach(function (r) {
+          const key = r.date + '|' + r.bvid;
+          const i = index[key];
+          if (i === undefined) {
+            merged.push(r);
+            index[key] = merged.length - 1;
+            added++;
+          } else {
+            const cur = merged[i];
+            if (Number(r.watchedSeconds) > Number(cur.watchedSeconds)) {
+              cur.watchedSeconds = Number(r.watchedSeconds) || 0;
+              updated++;
+            }
+            cur.openCount = Math.max(Number(cur.openCount) || 1, Number(r.openCount) || 1);
+            cur.lastActive = Math.max(Number(cur.lastActive) || 0, Number(r.lastActive) || 0);
+            if (!cur.videoTitle && r.videoTitle) cur.videoTitle = r.videoTitle;
+            if (!cur.uploader && r.uploader) cur.uploader = r.uploader;
+            if (!cur.uploaderId && r.uploaderId) cur.uploaderId = r.uploaderId;
+          }
+        });
+        Store.setRecords(merged);
+        archiveIfNeeded();
+        this.destroyCharts();
+        this.render();
+        log('导入完成：新增 ' + added + ' 条，更新 ' + updated + ' 条', filename);
+        window.alert('导入完成：新增 ' + added + ' 条，更新 ' + updated + ' 条。\n共 ' + merged.length + ' 条记录。');
+      } catch (err) {
+        logError('Panel._applyImport', err);
+        window.alert('导入失败：' + (err && err.message ? err.message : '未知错误'));
       }
     },
 
@@ -1700,6 +1998,12 @@
     [
       { n: formatDuration(data.totalSeconds), l: '本周总时长' },
       { n: data.totalVideos + ' 个', l: '本周视频数' },
+      {
+        n: data.wow && data.wow.hasLast
+          ? (data.wow.delta >= 0 ? '+' : '-') + Math.abs(Math.round(data.wow.delta)) + '%'
+          : (data.streak ? data.streak + ' 天' : '—'),
+        l: data.wow && data.wow.hasLast ? '环比上周' : '连续观看',
+      },
     ].forEach(function (it, i) {
       const d = document.createElement('div');
       d.className = 'bwp-anim';
@@ -1777,9 +2081,13 @@
     const sum = document.createElement('div');
     sum.className = 'bwp-rp-sum bwp-anim';
     sum.style.setProperty('--bwp-i', 6);
+    const wowText = data.wow && data.wow.hasLast
+      ? '，时长比上周<b>' + (data.wow.delta >= 0 ? '多' : '少') + Math.abs(Math.round(data.wow.delta)) + '%</b>'
+      : '';
     sum.innerHTML = '本周共看 <b>' + data.totalVideos + '</b> 个视频，'
       + (data.peakSlot ? '最常在<b>' + data.peakSlot + '</b>打开B站' : '观看时段较分散')
-      + (data.topUploaders[0] ? '，最爱 <b>' + escapeHTML(data.topUploaders[0].name) + '</b>' : '') + '。';
+      + (data.topUploaders[0] ? '，最爱 <b>' + escapeHTML(data.topUploaders[0].name) + '</b>' : '')
+      + wowText + '。';
     root.appendChild(sum);
 
     return root;
@@ -1950,7 +2258,7 @@
     safe(function () {
       Store.initSchema();
       wrapHistory();
-      log('脚本已加载，版本 0.2.1', location.href);
+      log('脚本已加载，版本 0.3.0', location.href);
 
       // 阶段 3：仅视频页启用采集（SPA 路由切换由守护定时器处理）
       safe(function () { ensureCollector(); }, 'ensureCollector');
@@ -1962,10 +2270,9 @@
       // 阶段 5：周日首次打开提醒查看本周报告
       safe(function () { maybeShowWeeklyReminder(); }, 'maybeShowWeeklyReminder');
 
-      // 阶段 4：仅在视频页挂载面板（图表懒加载，仅打开时渲染）
-      if (Collector.isVideoPage()) {
-        safe(function () { Panel.mount(); }, 'Panel.mount');
-      }
+      // 阶段 4：面板全站可用，任意 B 站页面都能打开查看数据
+      // （采集仍只在 /video/ 页激活；图表懒加载，仅打开时渲染）
+      safe(function () { Panel.mount(); }, 'Panel.mount');
     }, 'bootstrap');
   }
 

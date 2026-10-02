@@ -2,7 +2,7 @@ https://github.com/Gavin-gwj/bilibili-watch-panel
 
 # Bilibili Watch Panel · B站个人观看数据面板
 
-![version](https://img.shields.io/badge/version-0.2.1-fb7299)
+![version](https://img.shields.io/badge/version-0.3.0-fb7299)
 ![Tampermonkey](https://img.shields.io/badge/Tampermonkey-compatible-4a90d9)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
@@ -34,7 +34,8 @@ https://github.com/Gavin-gwj/bilibili-watch-panel
    - 打开 Tampermonkey 面板 → 「添加新脚本」；
    - 全选删除默认内容，粘贴本脚本全文；
    - `Ctrl + S` 保存。
-4. 打开任意 B 站视频页（`https://www.bilibili.com/video/...`），页面右上角会出现粉色浮动按钮（圆角方形，线性图表图标）。
+4. 打开任意 B 站页面（视频页、首页、动态页均可），页面右上角会出现粉色浮动按钮（圆角方形，线性图表图标）。
+5. 点击按钮打开面板；采集观看数据需在**视频页**播放视频，其余页面仅用于查看数据。
 
 ---
 
@@ -45,9 +46,9 @@ https://github.com/Gavin-gwj/bilibili-watch-panel
 | Tab | 内容 |
 | --- | --- |
 | 今日 | 今日总时长、今日视频数、按 UP 主分布饼图 |
-| 本周 | 近 7 天每日时长折线图、本周 Top5 UP 主柱状图 |
-| 全部 | 累计总时长 / 总视频数 / 覆盖 UP 主数、最近 20 条观看记录 |
-| 报告 | 卡片式本周使用报告，可导出 PNG 图片 |
+| 本周 | 近 7 天每日时长折线图、本周 Top5 UP 主柱状图、连续观看天数、环比上周 |
+| 全部 | 累计总时长 / 总视频数 / 覆盖 UP 主数、近一年热力图、记录搜索、最多 100 条观看记录 |
+| 报告 | 卡片式本周使用报告（含连续天数 / 环比），可导出 PNG 图片 |
 
 ### 2. 本周使用报告
 
@@ -62,15 +63,17 @@ https://github.com/Gavin-gwj/bilibili-watch-panel
 ### 3. 数据管理
 
 - **导出 JSON 备份**：面板底部一键下载 `bwp-backup-YYYY-MM-DD.json`，含 `watchRecords` 与归档。
+- **导入 JSON 备份**：面板底部「导入JSON」选择备份文件，按「日期 + bvid」与现有数据合并；同一天同一视频保留时长较大者，`openCount` 取较大值，缺失的标题 / UP 主信息自动补齐。
 - **清空全部数据**：带**两次确认**，清空后不可恢复。
-- **拖动浮动按钮**：按住拖动，松手自动吸附左右边缘，位置本地记忆。
+- **拖动浮动按钮**：按住拖动，松手自动吸附左右边缘，位置本地记忆，任意 B 站页面均可使用。
+- **自动更新**：脚本声明了 `@updateURL` / `@downloadURL`，Tampermonkey 会按 `@version` 自动检查新版本。
 
 ### 4. 统计口径
 
 - 按**实际播放进度（`video.currentTime` 推进量）**统计，不乘倍速，卡顿/缓冲不计。
 - 同一自然日、同一视频只保留一条记录，重复打开累加时长并增加 `openCount`。
 - 一周以**周一**为起点，周报按 ISO 周标识（如 `2026-W40`）。
-- 数据超过 5000 条自动归档旧记录，保证长期使用不卡顿。
+- 数据超过 5000 条自动归档旧记录，保证长期使用不卡顿；归档达到 20000 条上限时会裁剪最旧记录，并在面板内提示。
 
 ---
 
@@ -81,7 +84,7 @@ https://github.com/Gavin-gwj/bilibili-watch-panel
 | 数据存在哪？ | 只存在本机浏览器的 Tampermonkey 扩展存储里（`GM_setValue`）。仓库与任何服务器都收不到你的数据。 |
 | 会不会上传我的数据？ | 不会。脚本没有任何数据上报端点，也不使用 `XMLHttpRequest`/`sendBeacon`。 |
 | 怎么清空数据？ | 面板底部设置区 → 「清空全部数据」→ 两次确认。 |
-| 怎么导出/迁移数据？ | 面板底部设置区 → 「导出 JSON 备份」，得到完整 JSON。当前版本暂不支持导入。 |
+| 怎么导出/迁移数据？ | 面板底部 → 「导出JSON」得到完整备份；在新浏览器 / 新设备装好脚本后点「导入JSON」即可合并，重复记录自动去重。 |
 | 会不会拖慢 B 站？ | 心跳每 5 秒一次轻量计算；面板关闭时不渲染图表；关闭面板会销毁全部 Chart 实例；存储写入有 15 秒节流。 |
 | 为什么时长比实际看的少？ | 只统计 `video.currentTime` 的真实推进；卡顿、缓冲、切后台、暂停都不计入。 |
 | B 站改版后不显示数据了怎么办？ | 所有页面选择器集中在脚本的 `SELECTORS` 常量区，改版后只需更新对应选择器，不影响已有数据。 |
