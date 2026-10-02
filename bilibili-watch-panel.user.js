@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili Watch Panel
 // @namespace    https://github.com/Gavin-gwj/bilibili-watch-panel
-// @version      0.2.0
+// @version      0.2.1
 // @description  本地B站观看数据统计与可视化面板
 // @author       Gavin-gwj
 // @match        https://*.bilibili.com/*
@@ -1121,6 +1121,13 @@
     '.bwp-btn:active { transform: translateY(0) scale(.99); }',
     '.bwp-btn.danger { background: #fff; color: #e05c82; border-color: #ffd6e2; box-shadow: none; }',
     '.bwp-btn.danger:hover { background: #fff5f8; box-shadow: 0 4px 12px rgba(251,114,153,.14); }',
+    /* ---------- 卡片错峰入场动效 ---------- */
+    '@keyframes bwp-rise { from { opacity: 0; transform: translateY(9px) scale(.985); } to { opacity: 1; transform: none; } }',
+    '.bwp-anim { animation: bwp-rise .36s cubic-bezier(.22,.9,.3,1) backwards; animation-delay: calc(var(--bwp-i, 0) * 46ms); }',
+    '@keyframes bwp-bar { from { transform: scaleX(0); } to { transform: scaleX(1); } }',
+    '.bwp-rp-bar i { transform-origin: left center; animation: bwp-bar .52s cubic-bezier(.22,.9,.3,1) backwards; }',
+    '.bwp-empty .dot { animation: bwp-rise .4s cubic-bezier(.22,.9,.3,1) backwards; }',
+    '@media (prefers-reduced-motion: reduce) { .bwp-anim, .bwp-empty .dot, .bwp-toast, .bwp-rp-bar i { animation: none; } }',
     /* ---------- 小屏适配与动效偏好 ---------- */
     '@media (max-width: 480px) { .bwp-panel { width: 100vw; max-width: 100vw; border-radius: 0; } .bwp-tabs { margin: 12px 12px 0; } .bwp-body { padding: 14px 12px 18px; } .bwp-cards-3 .bwp-card .num { font-size: 15.5px; } .bwp-cards-3 .bwp-card { padding: 11px 9px; } }',
     '@media (prefers-reduced-motion: reduce) { .bwp-fab, .bwp-panel, .bwp-tab, .bwp-btn, .bwp-item, .bwp-close { transition: none; } .bwp-close:hover { transform: none; } }',
@@ -1436,9 +1443,10 @@
       this.el.body.appendChild(this.subTitle('最近 20 条观看记录'));
       const list = document.createElement('div');
       list.className = 'bwp-list';
-      data.recent.forEach(function (r) {
+      data.recent.forEach(function (r, i) {
         const item = document.createElement('div');
-        item.className = 'bwp-item';
+        item.className = 'bwp-item bwp-anim';
+        item.style.setProperty('--bwp-i', Math.min(i, 8));
         const t = document.createElement('div');
         t.className = 't';
         t.textContent = r.videoTitle || r.bvid || '未知视频';
@@ -1460,9 +1468,10 @@
     cards(items) {
       const wrap = document.createElement('div');
       wrap.className = 'bwp-cards' + (items.length >= 3 ? ' bwp-cards-3' : '');
-      items.forEach(function (it) {
+      items.forEach(function (it, i) {
         const c = document.createElement('div');
-        c.className = 'bwp-card' + (it.compact ? ' compact' : '');
+        c.className = 'bwp-card bwp-anim' + (it.compact ? ' compact' : '');
+        c.style.setProperty('--bwp-i', i);
         const n = document.createElement('div');
         n.className = 'num';
         n.textContent = it.num;
@@ -1484,7 +1493,7 @@
 
     chartBox(id) {
       const box = document.createElement('div');
-      box.className = 'bwp-chart';
+      box.className = 'bwp-chart bwp-anim';
       const cv = document.createElement('canvas');
       cv.id = id;
       box.appendChild(cv);
@@ -1681,6 +1690,8 @@
     wk.className = 'bwp-rp-week';
     wk.textContent = data.weekKey;
     head.appendChild(title); head.appendChild(wk);
+    head.className = 'bwp-rp-head bwp-anim';
+    head.style.setProperty('--bwp-i', 0);
     root.appendChild(head);
 
     // 大数字卡
@@ -1689,8 +1700,10 @@
     [
       { n: formatDuration(data.totalSeconds), l: '本周总时长' },
       { n: data.totalVideos + ' 个', l: '本周视频数' },
-    ].forEach(function (it) {
+    ].forEach(function (it, i) {
       const d = document.createElement('div');
+      d.className = 'bwp-anim';
+      d.style.setProperty('--bwp-i', 1 + i);
       const n = document.createElement('div'); n.className = 'n'; n.textContent = it.n;
       const l = document.createElement('div'); l.className = 'l'; l.textContent = it.l;
       d.appendChild(n); d.appendChild(l);
@@ -1700,7 +1713,8 @@
 
     // 最爱 UP 主 Top5
     const upSec = document.createElement('div');
-    upSec.className = 'bwp-rp-sec';
+    upSec.className = 'bwp-rp-sec bwp-anim';
+    upSec.style.setProperty('--bwp-i', 3);
     const h1 = document.createElement('h4');
     h1.textContent = '最爱 UP 主 Top5';
     upSec.appendChild(h1);
@@ -1718,6 +1732,7 @@
       bar.className = 'bwp-rp-bar';
       const inner = document.createElement('i');
       inner.style.width = Math.max(6, Math.round(u.seconds / maxSec * 100)) + '%';
+      inner.style.animationDelay = (160 + i * 70) + 'ms';
       bar.appendChild(inner);
       upSec.appendChild(bar);
     });
@@ -1725,7 +1740,8 @@
 
     // 每日迷你折线
     const daySec = document.createElement('div');
-    daySec.className = 'bwp-rp-sec';
+    daySec.className = 'bwp-rp-sec bwp-anim';
+    daySec.style.setProperty('--bwp-i', 4);
     const h2 = document.createElement('h4');
     h2.textContent = '每日观看时长';
     daySec.appendChild(h2);
@@ -1739,7 +1755,8 @@
 
     // 高峰时段
     const slotSec = document.createElement('div');
-    slotSec.className = 'bwp-rp-sec';
+    slotSec.className = 'bwp-rp-sec bwp-anim';
+    slotSec.style.setProperty('--bwp-i', 5);
     const h3 = document.createElement('h4');
     h3.textContent = '观看高峰时段';
     slotSec.appendChild(h3);
@@ -1758,7 +1775,8 @@
 
     // 一句话总结
     const sum = document.createElement('div');
-    sum.className = 'bwp-rp-sum';
+    sum.className = 'bwp-rp-sum bwp-anim';
+    sum.style.setProperty('--bwp-i', 6);
     sum.innerHTML = '本周共看 <b>' + data.totalVideos + '</b> 个视频，'
       + (data.peakSlot ? '最常在<b>' + data.peakSlot + '</b>打开B站' : '观看时段较分散')
       + (data.topUploaders[0] ? '，最爱 <b>' + escapeHTML(data.topUploaders[0].name) + '</b>' : '') + '。';
@@ -1832,6 +1850,18 @@
       style.textContent = REPORT_CSS;
       wrap.appendChild(style);
       const clone = node.cloneNode(true);
+      // 截图前彻底关闭克隆体内的动画：html2canvas 会按计算样式复制子树，
+      // 入场动画/进度条动画会让元素停在起始帧（透明或 scaleX(0)），
+      // 导致导出的 PNG 出现空白区块或空进度条。
+      [clone].concat(Array.prototype.slice.call(clone.querySelectorAll('*'))).forEach(function (el) {
+        if (!el || !el.style) return;
+        el.style.animation = 'none';
+        el.style.webkitAnimation = 'none';
+        el.style.transition = 'none';
+        el.style.opacity = '';
+        el.style.transform = '';
+        el.style.animationDelay = '';
+      });
 
       // canvas 内容不会随 cloneNode 复制，改用快照图片
       const srcCanvas = node.querySelectorAll('canvas');
@@ -1920,7 +1950,7 @@
     safe(function () {
       Store.initSchema();
       wrapHistory();
-      log('脚本已加载，版本 0.2.0', location.href);
+      log('脚本已加载，版本 0.2.1', location.href);
 
       // 阶段 3：仅视频页启用采集（SPA 路由切换由守护定时器处理）
       safe(function () { ensureCollector(); }, 'ensureCollector');
@@ -1945,3 +1975,4 @@
     bootstrap();
   }
 })();
+

@@ -2,6 +2,24 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/v1.0.0/)。
 
+## [0.2.1] - 2026-10-02
+
+### Added
+
+- **卡片错峰入场动效**：数字卡、图表容器、观看记录列表按 46ms 间隔依次上浮淡入（位移 9px + 轻微缩放，360ms，`cubic-bezier(.22,.9,.3,1)`）；长列表错峰封顶 8 档，避免拖沓。
+- **报告分层入场**：报告头 → 大数字卡 → Top5 → 每日折线 → 高峰时段 → 总结，按 0–6 顺序依次入场；Top5 占比条以 `scaleX(0→1)` 生长，按条目 160/230/300ms 错峰。
+- **空状态动效**：无数据图标位 400ms 入场。
+
+### Fixed
+
+- **导出 PNG 出现空白区块**：入场动效会被 html2canvas 的内部克隆重播，导致截图停在淡入起始帧（大片空白、进度条为空）。现在导出前会清空克隆体上的 `animation/transition/opacity/transform`，确保图像完整。
+
+### Notes
+
+- 动效一律使用 `animation-fill-mode: backwards`，结束后不残留内联样式，`hover` 抬升反馈不受影响。
+- 系统开启「减少动态效果」时全部动画自动关闭。
+- 仅入场动画，不做滚动触发，避免面板内滚动时反复重播。
+
 ## [0.2.0] - 2026-10-02
 
 ### Changed
@@ -46,3 +64,4 @@
 - 纯本地运行，零数据上传；不含 `XMLHttpRequest`/`sendBeacon` 通道。
 - 除视频信息 API 兜底（信息缺失时触发一次并缓存）外不额外发请求。
 - 不爬取他人数据、不破解付费机制、不干扰 B 站计费体系。
+
