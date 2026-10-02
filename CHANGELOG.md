@@ -6,7 +6,23 @@
 
 ### Added
 
-- 项目初始化：Tampermonkey 用户脚本骨架、元数据头、配置常量区、选择器集中区。
-- 本地存储层：`watchRecords` / `watchRecordsArchive` 读写与结构校验。
-- 文档：需求分析、技术设计。
-- Git / GitHub 版本管理：公开仓库、Conventional Commits 规范。
+- **数据采集层**：仅 `/video/` 视频页激活；`__INITIAL_STATE__` → DOM → URL 三级降级解析视频信息；按 `video.currentTime` 实际推进量累加观看秒数；暂停、缓冲、切后台、关页面均停止计时；跨零点自动拆分。
+- **去重与合并**：同一天同一视频合并为一条记录，重复打开累加时长并单独记 `openCount`。
+- **本地存储层**：`GM_setValue` / `GM_getValue` / `GM_deleteValue`；读取时结构校验，坏数据跳过；超过 5000 条自动归档到 `watchRecordsArchive`；视频信息缓存 7 天。
+- **面板 UI**：右上角可拖动浮动按钮（B 站粉 `#fb7299`）；右侧 380px 抽屉面板，圆角 16px、0.25s 动画；全部 UI 位于 Shadow DOM；ESC 可关闭。
+- **今日 Tab**：今日总时长、今日视频数、按 UP 主分布饼图。
+- **本周 Tab**：近 7 天每日时长折线图、本周 Top5 UP 主柱状图（周一为周起点）。
+- **全部 Tab**：累计总时长 / 总视频数 / 覆盖 UP 主数、最近 20 条观看记录。
+- **报告 Tab**：卡片式本周使用报告（大数字卡、最爱 UP 主 Top5、每日迷你折线、观看高峰时段、一句话总结）。
+- **报告导出**：html2canvas 导出 PNG（`bwp-week-report-YYYY-Www.png`）。
+- **数据管理**：导出 JSON 备份、清空全部数据（二次确认）。
+- **周日提醒**：每周日首次打开 B 站右下角轻提示，`lastReminderWeek` 防重复。
+- **图表生命周期**：Chart.js 懒加载，面板关闭时销毁全部实例，防内存泄漏。
+- **工程规范**：所有选择器集中在 `SELECTORS` 常量区；采集与渲染主流程 try/catch 隔离；中文注释。
+- **文档**：需求分析、技术设计、测试清单、README、CHANGELOG。
+
+### Security / Privacy
+
+- 纯本地运行，零数据上传；不含 `XMLHttpRequest`/`sendBeacon` 通道。
+- 除视频信息 API 兜底（信息缺失时触发一次并缓存）外不额外发请求。
+- 不爬取他人数据、不破解付费机制、不干扰 B 站计费体系。
