@@ -1,6 +1,6 @@
-# Bilibili Watch Panel · B站个人观看数据面板
+https://github.com/Gavin-gwj/bilibili-watch-panel
 
-**仓库地址：https://github.com/Gavin-gwj/bilibili-watch-panel**
+# Bilibili Watch Panel · B站个人观看数据面板
 
 ![version](https://img.shields.io/badge/version-0.1.0-fb7299)
 ![Tampermonkey](https://img.shields.io/badge/Tampermonkey-compatible-4a90d9)
