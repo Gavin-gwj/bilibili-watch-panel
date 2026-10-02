@@ -2,7 +2,7 @@ https://github.com/Gavin-gwj/bilibili-watch-panel
 
 # Bilibili Watch Panel · B站个人观看数据面板
 
-![version](https://img.shields.io/badge/version-0.1.0-fb7299)
+![version](https://img.shields.io/badge/version-0.2.0-fb7299)
 ![Tampermonkey](https://img.shields.io/badge/Tampermonkey-compatible-4a90d9)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
@@ -34,7 +34,7 @@ https://github.com/Gavin-gwj/bilibili-watch-panel
    - 打开 Tampermonkey 面板 → 「添加新脚本」；
    - 全选删除默认内容，粘贴本脚本全文；
    - `Ctrl + S` 保存。
-4. 打开任意 B 站视频页（`https://www.bilibili.com/video/...`），页面右侧会出现粉色圆形按钮。
+4. 打开任意 B 站视频页（`https://www.bilibili.com/video/...`），页面右上角会出现粉色浮动按钮（圆角方形，线性图表图标）。
 
 ---
 
