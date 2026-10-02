@@ -1137,6 +1137,11 @@
         this.el.body = root.querySelector('.bwp-body');
         this.el.footer = root.querySelector('.bwp-footer');
 
+        // 注入报告与提醒样式（同处 Shadow DOM，保证导出与展示一致）
+        const extra = document.createElement('style');
+        extra.textContent = (typeof REPORT_CSS === 'string' ? REPORT_CSS : '') + '\n' + (typeof TOAST_CSS === 'string' ? TOAST_CSS : '');
+        root.appendChild(extra);
+
         this.el.fab.style.left = (window.innerWidth - 64) + 'px';
         this.el.fab.style.top = '72px';
         this.buildTabs();
@@ -1167,7 +1172,7 @@
 
     /** Tab 列表：阶段 5 会追加「报告」 */
     tabList() {
-      return ['今日', '本周', '全部'];
+      return ['今日', '本周', '全部', '报告'];
     },
 
     /** 同步 Tab 高亮 */
@@ -1303,7 +1308,7 @@
         if (self.current === '今日') self.renderToday();
         else if (self.current === '本周') self.renderWeek();
         else if (self.current === '全部') self.renderAll();
-        else if (self.current === '报告' && typeof renderReport === 'function') self.renderReportTab();
+        else if (self.current === '报告' && typeof self.renderReportTab === 'function') self.renderReportTab();
       }, 'Panel.render.' + self.current);
     },
 
@@ -1532,8 +1537,285 @@
 
   /* ============================================================
    * ⑧ Report 本周报告区
-   * 阶段 5 实现
+   * 卡片式周报 + PNG 导出 + 周日提醒
    * ============================================================ */
+
+  /** 报告区域的独立样式（Shadow DOM 与导出容器共用） */
+  const REPORT_CSS = [
+    '.bwp-report { width: 100%; background: linear-gradient(180deg,#fff5f8 0%,#ffffff 42%); border: 1px solid #ffe1ea; border-radius: 14px; padding: 14px 12px 4px; }',
+    '.bwp-rp-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }',
+    '.bwp-rp-title { font-size: 15px; font-weight: 700; color: #18191c; }',
+    '.bwp-rp-week { font-size: 11px; color: #fb7299; background: #ffe8ef; border-radius: 999px; padding: 3px 8px; }',
+    '.bwp-rp-big { display: flex; gap: 10px; margin-bottom: 12px; }',
+    '.bwp-rp-big div { flex: 1; background: linear-gradient(135deg,#fb7299,#ff9db8); border-radius: 12px; padding: 12px; color: #fff; }',
+    '.bwp-rp-big .n { font-size: 20px; font-weight: 700; line-height: 1.2; }',
+    '.bwp-rp-big .l { font-size: 11px; opacity: .9; margin-top: 4px; }',
+    '.bwp-rp-sec { background: #fff; border: 1px solid #f4e6eb; border-radius: 12px; padding: 10px 11px; margin-bottom: 10px; }',
+    '.bwp-rp-sec h4 { margin: 0 0 8px; font-size: 12px; color: #61666d; font-weight: 600; }',
+    '.bwp-rp-up { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }',
+    '.bwp-rp-up .idx { width: 18px; height: 18px; border-radius: 6px; background: #fb7299; color: #fff; font-size: 10px; display: flex; align-items: center; justify-content: center; flex: none; }',
+    '.bwp-rp-up .nm { flex: 1; font-size: 12px; color: #18191c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+    '.bwp-rp-up .mt { font-size: 11px; color: #9499a0; flex: none; }',
+    '.bwp-rp-bar { height: 5px; border-radius: 3px; background: #ffe8ef; margin: 3px 0 9px; overflow: hidden; }',
+    '.bwp-rp-bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg,#fb7299,#ff9db8); }',
+    '.bwp-rp-chart { position: relative; height: 120px; }',
+    '.bwp-rp-slots { display: flex; gap: 6px; }',
+    '.bwp-rp-slot { flex: 1; text-align: center; border-radius: 9px; padding: 8px 2px; background: #fbfbfc; border: 1px solid #f0f0f2; }',
+    '.bwp-rp-slot.hot { background: #fff0f5; border-color: #ffc0d1; }',
+    '.bwp-rp-slot .s { font-size: 11px; color: #61666d; }',
+    '.bwp-rp-slot .v { font-size: 12px; font-weight: 700; color: #fb7299; margin-top: 3px; }',
+    '.bwp-rp-slot.hot .s { color: #e05c82; font-weight: 600; }',
+    '.bwp-rp-sum { background: #fff; border: 1px dashed #ffc0d1; border-radius: 12px; padding: 11px; font-size: 12px; color: #61666d; line-height: 1.6; margin-bottom: 12px; }',
+    '.bwp-rp-sum b { color: #fb7299; }',
+    '.bwp-rp-empty { text-align: center; color: #9499a0; font-size: 12px; padding: 26px 8px; }',
+  ].join('\n');
+
+  /** 周日提醒气泡样式 */
+  const TOAST_CSS = [
+    '.bwp-toast { position: fixed; right: 18px; bottom: 24px; z-index: 2147483002; background: #fff; border: 1px solid #ffe1ea; box-shadow: 0 8px 24px rgba(251,114,153,.25); border-radius: 12px; padding: 11px 14px; font-size: 12px; color: #18191c; cursor: pointer; max-width: 260px; line-height: 1.5; }',
+    '.bwp-toast b { color: #fb7299; }',
+    '.bwp-toast .x { float: right; margin-left: 8px; color: #9499a0; }',
+  ].join('\n');
+
+  /** 渲染报告卡片内容（返回报告根元素） */
+  function buildReportNode(data) {
+    const root = document.createElement('div');
+    root.className = 'bwp-report';
+
+    if (data.totalVideos === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'bwp-rp-empty';
+      empty.textContent = '本周还没有观看记录，先去看几个视频吧～';
+      root.appendChild(empty);
+      return root;
+    }
+
+    // 头部
+    const head = document.createElement('div');
+    head.className = 'bwp-rp-head';
+    const title = document.createElement('span');
+    title.className = 'bwp-rp-title';
+    title.textContent = '本周使用报告';
+    const wk = document.createElement('span');
+    wk.className = 'bwp-rp-week';
+    wk.textContent = data.weekKey;
+    head.appendChild(title); head.appendChild(wk);
+    root.appendChild(head);
+
+    // 大数字卡
+    const big = document.createElement('div');
+    big.className = 'bwp-rp-big';
+    [
+      { n: formatDuration(data.totalSeconds), l: '本周总时长' },
+      { n: data.totalVideos + ' 个', l: '本周视频数' },
+    ].forEach(function (it) {
+      const d = document.createElement('div');
+      const n = document.createElement('div'); n.className = 'n'; n.textContent = it.n;
+      const l = document.createElement('div'); l.className = 'l'; l.textContent = it.l;
+      d.appendChild(n); d.appendChild(l);
+      big.appendChild(d);
+    });
+    root.appendChild(big);
+
+    // 最爱 UP 主 Top5
+    const upSec = document.createElement('div');
+    upSec.className = 'bwp-rp-sec';
+    const h1 = document.createElement('h4');
+    h1.textContent = '最爱 UP 主 Top5';
+    upSec.appendChild(h1);
+    const maxSec = data.topUploaders[0] ? data.topUploaders[0].seconds : 1;
+    data.topUploaders.forEach(function (u, i) {
+      const row = document.createElement('div');
+      row.className = 'bwp-rp-up';
+      const idx = document.createElement('span'); idx.className = 'idx'; idx.textContent = String(i + 1);
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = u.name;
+      const mt = document.createElement('span'); mt.className = 'mt';
+      mt.textContent = u.count + ' 次 · ' + formatDuration(u.seconds);
+      row.appendChild(idx); row.appendChild(nm); row.appendChild(mt);
+      upSec.appendChild(row);
+      const bar = document.createElement('div');
+      bar.className = 'bwp-rp-bar';
+      const inner = document.createElement('i');
+      inner.style.width = Math.max(6, Math.round(u.seconds / maxSec * 100)) + '%';
+      bar.appendChild(inner);
+      upSec.appendChild(bar);
+    });
+    root.appendChild(upSec);
+
+    // 每日迷你折线
+    const daySec = document.createElement('div');
+    daySec.className = 'bwp-rp-sec';
+    const h2 = document.createElement('h4');
+    h2.textContent = '每日观看时长';
+    daySec.appendChild(h2);
+    const chartBox = document.createElement('div');
+    chartBox.className = 'bwp-rp-chart';
+    const cv = document.createElement('canvas');
+    cv.id = 'reportDaily';
+    chartBox.appendChild(cv);
+    daySec.appendChild(chartBox);
+    root.appendChild(daySec);
+
+    // 高峰时段
+    const slotSec = document.createElement('div');
+    slotSec.className = 'bwp-rp-sec';
+    const h3 = document.createElement('h4');
+    h3.textContent = '观看高峰时段';
+    slotSec.appendChild(h3);
+    const slots = document.createElement('div');
+    slots.className = 'bwp-rp-slots';
+    data.slots.forEach(function (s) {
+      const d = document.createElement('div');
+      d.className = 'bwp-rp-slot' + (s.name === data.peakSlot ? ' hot' : '');
+      const n = document.createElement('div'); n.className = 's'; n.textContent = s.name;
+      const v = document.createElement('div'); v.className = 'v'; v.textContent = Math.round(s.seconds / 60) + '分';
+      d.appendChild(n); d.appendChild(v);
+      slots.appendChild(d);
+    });
+    slotSec.appendChild(slots);
+    root.appendChild(slotSec);
+
+    // 一句话总结
+    const sum = document.createElement('div');
+    sum.className = 'bwp-rp-sum';
+    sum.innerHTML = '本周共看 <b>' + data.totalVideos + '</b> 个视频，'
+      + (data.peakSlot ? '最常在<b>' + data.peakSlot + '</b>打开B站' : '观看时段较分散')
+      + (data.topUploaders[0] ? '，最爱 <b>' + escapeHTML(data.topUploaders[0].name) + '</b>' : '') + '。';
+    root.appendChild(sum);
+
+    return root;
+  }
+
+  /** 简单 HTML 转义，避免 UP 主昵称破坏结构 */
+  function escapeHTML(text) {
+    return String(text == null ? '' : text)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  /** 渲染「报告」Tab */
+  Panel.renderReportTab = function () {
+    const self = this;
+    const data = Stats.report();
+    const node = buildReportNode(data);
+    self.el.body.appendChild(node);
+
+    // 每日迷你折线图
+    if (data.totalVideos > 0) {
+      self.makeChart('reportDaily', {
+        type: 'line',
+        data: {
+          labels: data.daily.map(function (d) { return d.label; }),
+          datasets: [{
+            label: '分钟',
+            data: data.daily.map(function (d) { return Math.round(d.seconds / 60); }),
+            borderColor: CHART_COLORS[0],
+            backgroundColor: 'rgba(251,114,153,.16)',
+            fill: true, tension: .35, pointRadius: 2, borderWidth: 2,
+          }],
+        },
+        options: {
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, ticks: { font: { size: 10 } } }, x: { ticks: { font: { size: 10 } } } },
+        },
+      });
+    }
+
+    // 导出按钮（放在报告卡之外，避免被截图）
+    const bar = document.createElement('div');
+    bar.style.cssText = 'display:flex;gap:8px;margin-top:12px;';
+    const btn = document.createElement('button');
+    btn.className = 'bwp-btn';
+    btn.textContent = '导出图片';
+    btn.style.flex = '1';
+    btn.addEventListener('click', function () { self.exportReport(); });
+    bar.appendChild(btn);
+    self.el.body.appendChild(bar);
+  };
+
+  /** 把报告区域导出为 PNG（含 canvas 快照处理） */
+  Panel.exportReport = function () {
+    const self = this;
+    safe(function () {
+      const node = self.root.querySelector('.bwp-report');
+      if (!node) return;
+      if (typeof html2canvas === 'undefined') {
+        window.alert('图片导出库未加载成功，请检查网络后刷新页面重试。');
+        return;
+      }
+
+      // 克隆到临时容器：Shadow DOM 内容 html2canvas 无法直接渲染
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:fixed;left:-99999px;top:0;width:360px;background:#fff;';
+      const style = document.createElement('style');
+      style.textContent = REPORT_CSS;
+      wrap.appendChild(style);
+      const clone = node.cloneNode(true);
+
+      // canvas 内容不会随 cloneNode 复制，改用快照图片
+      const srcCanvas = node.querySelectorAll('canvas');
+      const dstCanvas = clone.querySelectorAll('canvas');
+      for (let i = 0; i < srcCanvas.length && i < dstCanvas.length; i++) {
+        try {
+          const img = document.createElement('img');
+          img.src = srcCanvas[i].toDataURL('image/png');
+          img.style.cssText = 'width:100%;height:auto;display:block;';
+          dstCanvas[i].parentNode.replaceChild(img, dstCanvas[i]);
+        } catch (err) { /* 单张画布快照失败不影响整体导出 */ }
+      }
+
+      wrap.appendChild(clone);
+      document.body.appendChild(wrap);
+
+      const weekLabel = Stats.report().weekKey;
+      html2canvas(wrap, { backgroundColor: '#ffffff', scale: 2, useCORS: true, logging: false })
+        .then(function (canvas) {
+          return new Promise(function (resolve) {
+            canvas.toBlob(function (blob) {
+              if (blob) self.downloadBlob(blob, 'bwp-week-report-' + weekLabel + '.png');
+              resolve();
+            }, 'image/png');
+          });
+        })
+        .catch(function (err) { logError('Panel.exportReport', err); })
+        .then(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); });
+    }, 'Panel.exportReport');
+  };
+
+  /** 周日首次打开时的轻提示（每周只提醒一次） */
+  function maybeShowWeeklyReminder() {
+    try {
+      const now = new Date();
+      if (now.getDay() !== 0) return;          // 仅周日
+      const wk = weekKey(now);
+      if (GM_getValue(CONFIG.KEYS.REMINDER, '') === wk) return;
+      GM_setValue(CONFIG.KEYS.REMINDER, wk);
+
+      if (!Panel.mounted) Panel.mount();
+      const old = Panel.root.querySelector('.bwp-toast');
+      if (old) old.remove();
+
+      const toast = document.createElement('div');
+      toast.className = 'bwp-toast';
+      const x = document.createElement('span');
+      x.className = 'x';
+      x.textContent = '×';
+      const txt = document.createElement('span');
+      txt.innerHTML = '本周B站报告已生成，<b>点击查看</b>';
+      toast.appendChild(x); toast.appendChild(txt);
+      toast.addEventListener('click', function (e) {
+        if (e.target === x) { toast.remove(); return; }
+        toast.remove();
+        Panel.show('报告');
+      });
+      Panel.root.appendChild(toast);
+      setTimeout(function () { if (toast.parentNode) toast.remove(); }, 12000);
+      log('已显示本周报告提醒', wk);
+    } catch (err) {
+      logError('maybeShowWeeklyReminder', err);
+    }
+  }
+
 
   /* ============================================================
    * ⑨ Bootstrap 入口
@@ -1565,6 +1847,9 @@
       setInterval(function () {
         safe(function () { ensureCollector(); }, 'ensureCollector.tick');
       }, 2000);
+
+      // 阶段 5：周日首次打开提醒查看本周报告
+      safe(function () { maybeShowWeeklyReminder(); }, 'maybeShowWeeklyReminder');
 
       // 阶段 4：仅在视频页挂载面板（图表懒加载，仅打开时渲染）
       if (Collector.isVideoPage()) {
