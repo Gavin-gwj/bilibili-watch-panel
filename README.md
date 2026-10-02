@@ -2,7 +2,7 @@ https://github.com/Gavin-gwj/bilibili-watch-panel
 
 # Bilibili Watch Panel · B站个人观看数据面板
 
-![version](https://img.shields.io/badge/version-0.3.0-fb7299)
+![version](https://img.shields.io/badge/version-0.3.1-fb7299)
 ![Tampermonkey](https://img.shields.io/badge/Tampermonkey-compatible-4a90d9)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
@@ -45,7 +45,7 @@ https://github.com/Gavin-gwj/bilibili-watch-panel
 
 | Tab | 内容 |
 | --- | --- |
-| 今日 | 今日总时长、今日视频数、按 UP 主分布饼图 |
+| 今日 | 今日总时长、视频数、较昨日变化、视频活跃时段、24 小时最近活跃时间线、UP 主排行、今日观看记录、本周节奏 |
 | 本周 | 近 7 天每日时长折线图、本周 Top5 UP 主柱状图、连续观看天数、环比上周 |
 | 全部 | 累计总时长 / 总视频数 / 覆盖 UP 主数、近一年热力图、记录搜索、最多 100 条观看记录 |
 | 报告 | 卡片式本周使用报告（含连续天数 / 环比），可导出 PNG 图片 |
