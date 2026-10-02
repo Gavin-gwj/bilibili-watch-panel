@@ -563,6 +563,8 @@
     opened: false,
     _timer: null,
     _bound: false,
+    /** 当前会话标识（URL + bvid），避免守护定时器重复重启 */
+    _sessionKey: '',
 
     /** 判断当前是否为视频详情页 */
     isVideoPage() {
@@ -582,6 +584,7 @@
       this.lastSaveAt = 0;
       this.opened = false;
       this._lastCurrentTime = NaN;
+      this._sessionKey = location.pathname + location.search;
 
       const self = this;
       resolveVideoInfo().then(function (info) {
@@ -877,13 +880,655 @@
 
   /* ============================================================
    * ⑥ Stats 数据聚合区
-   * 阶段 4 实现
+   * 只做纯计算，不涉及 DOM 与网络
    * ============================================================ */
+
+  /** 求和工具 */
+  function sumSeconds(list) {
+    return (list || []).reduce(function (acc, r) {
+      const v = Number(r && r.watchedSeconds);
+      return acc + (Number.isFinite(v) && v > 0 ? v : 0);
+    }, 0);
+  }
+
+  /** 按 UP 主聚合：返回 [{name, seconds, count}]，按时长倒序 */
+  function groupByUploader(list) {
+    const map = Object.create(null);
+    (list || []).forEach(function (r) {
+      const name = (r && r.uploader) ? String(r.uploader) : '未知UP主';
+      if (!map[name]) map[name] = { name: name, seconds: 0, count: 0 };
+      map[name].seconds += Number(r.watchedSeconds) || 0;
+      map[name].count += Math.max(1, Number(r.openCount) || 1);
+    });
+    return Object.keys(map).map(function (k) { return map[k]; })
+      .sort(function (a, b) { return b.seconds - a.seconds; });
+  }
+
+  /** 近 N 天（含今天）的日期字符串数组，从早到晚 */
+  function recentDates(days, endDate) {
+    const end = endDate || new Date();
+    const out = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(end.getFullYear(), end.getMonth(), end.getDate() - i);
+      out.push(formatDate(d));
+    }
+    return out;
+  }
+
+  /** 判断记录日期是否落在某个日期所在的 ISO 周（周一起） */
+  function isSameIsoWeek(dateStr, baseDate) {
+    try {
+      const d = new Date(dateStr + 'T00:00:00');
+      return weekKey(d) === weekKey(baseDate);
+    } catch (err) {
+      return false;
+    }
+  }
+
+  /** 观看时段划分：凌晨 / 上午 / 下午 / 晚上 */
+  const TIME_SLOTS = [
+    { name: '凌晨', from: 0, to: 6 },
+    { name: '上午', from: 6, to: 12 },
+    { name: '下午', from: 12, to: 18 },
+    { name: '晚上', from: 18, to: 24 },
+  ];
+
+  const Stats = {
+    /** 全部记录（主数组 + 归档） */
+    allRecords() {
+      return Store.getRecords().concat(Store.getArchive());
+    },
+
+    /** 今日汇总 */
+    today() {
+      const date = todayStr();
+      const list = Store.getRecords().filter(function (r) { return r.date === date; });
+      return {
+        date: date,
+        seconds: sumSeconds(list),
+        count: list.length,
+        byUploader: groupByUploader(list),
+      };
+    },
+
+    /** 近 7 天趋势 + 本周（周一起）Top5 UP 主 */
+    week() {
+      const records = Store.getRecords();
+      const dates = recentDates(7);
+      const daily = dates.map(function (d) {
+        const list = records.filter(function (r) { return r.date === d; });
+        return { date: d, label: d.slice(5), seconds: sumSeconds(list) };
+      });
+      const weekRecords = records.filter(function (r) { return isSameIsoWeek(r.date, new Date()); });
+      return {
+        daily: daily,
+        totalSeconds: daily.reduce(function (a, d) { return a + d.seconds; }, 0),
+        topUploaders: groupByUploader(weekRecords).slice(0, 5),
+        weekKey: weekKey(new Date()),
+      };
+    },
+
+    /** 全部汇总 */
+    all() {
+      const list = this.allRecords();
+      const uploaders = Object.create(null);
+      list.forEach(function (r) { uploaders[r.uploader || '未知UP主'] = 1; });
+      const recent = list.slice()
+        .sort(function (a, b) { return (b.lastActive || 0) - (a.lastActive || 0); })
+        .slice(0, 20);
+      return {
+        seconds: sumSeconds(list),
+        count: list.length,
+        uploaderCount: Object.keys(uploaders).length,
+        recent: recent,
+      };
+    },
+
+    /** 本周报告数据（周一为一周起点） */
+    report() {
+      const records = Store.getRecords();
+      const now = new Date();
+      const weekRecords = records.filter(function (r) { return isSameIsoWeek(r.date, now); });
+      const start = startOfWeek(now);
+      const dates = [];
+      for (let i = 0; i < 7; i++) {
+        dates.push(formatDate(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i)));
+      }
+      const daily = dates.map(function (d) {
+        const list = weekRecords.filter(function (r) { return r.date === d; });
+        return { date: d, label: d.slice(5), seconds: sumSeconds(list) };
+      });
+      const slots = TIME_SLOTS.map(function (s) {
+        let sec = 0;
+        weekRecords.forEach(function (r) {
+          const h = new Date(r.lastActive || r.timestamp || Date.now()).getHours();
+          if (h >= s.from && h < s.to) sec += Number(r.watchedSeconds) || 0;
+        });
+        return { name: s.name, seconds: sec };
+      }).sort(function (a, b) { return b.seconds - a.seconds; });
+      const top = groupByUploader(weekRecords).slice(0, 5);
+      const peak = slots[0] && slots[0].seconds > 0 ? slots[0].name : '';
+      const fav = top[0] ? top[0].name : '';
+      let summary = '本周还没有观看记录，去 B 站看个视频吧～';
+      if (weekRecords.length > 0) {
+        summary = '本周共看 ' + weekRecords.length + ' 个视频，'
+          + (peak ? '最常在' + peak + '打开B站' : '观看时段较分散')
+          + (fav ? '，最爱「' + fav + '」' : '') + '。';
+      }
+      return {
+        weekKey: weekKey(now),
+        totalSeconds: sumSeconds(weekRecords),
+        totalVideos: weekRecords.length,
+        topUploaders: top,
+        daily: daily,
+        slots: slots,
+        peakSlot: peak,
+        summary: summary,
+      };
+    },
+  };
+
 
   /* ============================================================
    * ⑦ UI 面板区
-   * 阶段 4 实现
+   * 全部 UI 挂在 Shadow DOM，避免与 B 站样式互相污染
    * ============================================================ */
+
+  /** 图表色板：B 站粉及近似色系 */
+  const CHART_COLORS = ['#fb7299', '#ff9db8', '#ffc0d1', '#e05c82', '#b84466', '#ffd0dd', '#a3a3a3'];
+
+  /** 面板 HTML 与样式模板 */
+  const PANEL_HTML = [
+    '<style>',
+    ':host { all: initial; }',
+    '* { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; }',
+    '.bwp-fab {',
+    '  position: fixed; z-index: 2147483000; cursor: grab; touch-action: none;',
+    '  width: 46px; height: 46px; border-radius: 50%; border: none; cursor: pointer;',
+    '  background: #fb7299; color: #fff; font-size: 20px; line-height: 1;',
+    '  box-shadow: 0 4px 14px rgba(251,114,153,.45);',
+    '  transition: transform .2s ease, box-shadow .2s ease;',
+    '}',
+    '.bwp-fab:hover { transform: scale(1.12); box-shadow: 0 6px 18px rgba(251,114,153,.6); }',
+    '.bwp-fab:active { transform: scale(.96); }',
+    '.bwp-panel {',
+    '  position: fixed; top: 0; right: 0; z-index: 2147483001;',
+    '  width: 380px; max-width: 96vw; height: 100vh;',
+    '  background: #fff; border-radius: 16px 0 0 16px;',
+    '  box-shadow: -6px 0 28px rgba(0,0,0,.18);',
+    '  display: flex; flex-direction: column;',
+    '  transform: translateX(105%); transition: transform .25s ease;',
+    '  color: #18191c; overflow: hidden;',
+    '}',
+    '.bwp-panel.open { transform: translateX(0); }',
+    '.bwp-header {',
+    '  display: flex; align-items: center; justify-content: space-between;',
+    '  padding: 14px 16px; background: linear-gradient(135deg,#fb7299,#ff9db8); color: #fff;',
+    '}',
+    '.bwp-title { font-size: 15px; font-weight: 600; }',
+    '.bwp-close { background: transparent; border: none; color: #fff; font-size: 20px; cursor: pointer; line-height: 1; padding: 2px 6px; border-radius: 6px; }',
+    '.bwp-close:hover { background: rgba(255,255,255,.22); }',
+    '.bwp-tabs { display: flex; gap: 4px; padding: 10px 12px 0; background: #fff; }',
+    '.bwp-tab { flex: 1; padding: 7px 0; font-size: 13px; text-align: center; cursor: pointer; border: none; background: #f5f5f7; color: #61666d; border-radius: 8px 8px 0 0; }',
+    '.bwp-tab.active { background: #fb7299; color: #fff; font-weight: 600; }',
+    '.bwp-body { flex: 1; overflow-y: auto; padding: 12px 14px 18px; }',
+    '.bwp-cards { display: flex; gap: 10px; margin-bottom: 12px; }',
+    '.bwp-card { flex: 1; background: #fff5f8; border: 1px solid #ffe1ea; border-radius: 12px; padding: 12px; }',
+    '.bwp-card .num { font-size: 20px; font-weight: 700; color: #fb7299; }',
+    '.bwp-card .lbl { font-size: 12px; color: #9499a0; margin-top: 4px; }',
+    '.bwp-chart { position: relative; height: 190px; margin-bottom: 14px; }',
+    '.bwp-sub { font-size: 12px; color: #9499a0; margin: 12px 0 6px; font-weight: 600; }',
+    '.bwp-empty { text-align: center; color: #9499a0; font-size: 13px; padding: 40px 10px; }',
+    '.bwp-empty .dot { width: 54px; height: 54px; border-radius: 50%; background: #ffe8ef; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; }',
+    '.bwp-list { display: flex; flex-direction: column; gap: 8px; }',
+    '.bwp-item { border: 1px solid #f0f0f2; border-radius: 10px; padding: 9px 10px; }',
+    '.bwp-item .t { font-size: 13px; font-weight: 600; color: #18191c; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }',
+    '.bwp-item .m { font-size: 11px; color: #9499a0; margin-top: 5px; display: flex; justify-content: space-between; gap: 8px; }',
+    '.bwp-footer { border-top: 1px solid #f0f0f2; padding: 10px 14px; display: flex; gap: 8px; background: #fff; }',
+    '.bwp-btn { flex: 1; padding: 8px 0; font-size: 12px; border-radius: 8px; border: 1px solid #fb7299; background: #fff; color: #fb7299; cursor: pointer; }',
+    '.bwp-btn:hover { background: #fff5f8; }',
+    '.bwp-btn.danger { border-color: #e05c82; color: #e05c82; }',
+    '.bwp-btn.danger:hover { background: #fff0f4; }',
+    '</style>',
+    '<button class="bwp-fab" title="B站观看数据面板">📊</button>',
+    '<aside class="bwp-panel" role="dialog" aria-label="B站观看数据面板">',
+    '  <header class="bwp-header">',
+    '    <span class="bwp-title">B站观看数据面板</span>',
+    '    <button class="bwp-close" title="关闭">×</button>',
+    '  </header>',
+    '  <nav class="bwp-tabs"></nav>',
+    '  <div class="bwp-body"></div>',
+    '  <footer class="bwp-footer">',
+    '    <button class="bwp-btn" data-act="export">导出JSON备份</button>',
+    '    <button class="bwp-btn danger" data-act="clear">清空全部数据</button>',
+    '  </footer>',
+    '</aside>',
+  ].join('\n');
+
+  const Panel = {
+    host: null,
+    root: null,
+    el: {},
+    charts: {},
+    current: '今日',
+    open: false,
+    mounted: false,
+
+    /** 挂载面板到页面（幂等） */
+    mount() {
+      if (this.mounted && this.host && document.documentElement.contains(this.host)) return;
+      try {
+        const old = document.getElementById('bwp-host');
+        if (old) old.remove();
+
+        const host = document.createElement('div');
+        host.id = 'bwp-host';
+        // 宿主本身不占位，交互交给 Shadow DOM 内部元素
+        host.style.cssText = 'all:initial;';
+        const root = host.attachShadow({ mode: 'open' });
+        root.innerHTML = PANEL_HTML;
+
+        this.host = host;
+        this.root = root;
+        this.el.fab = root.querySelector('.bwp-fab');
+        this.el.panel = root.querySelector('.bwp-panel');
+        this.el.close = root.querySelector('.bwp-close');
+        this.el.tabs = root.querySelector('.bwp-tabs');
+        this.el.body = root.querySelector('.bwp-body');
+        this.el.footer = root.querySelector('.bwp-footer');
+
+        this.el.fab.style.left = (window.innerWidth - 64) + 'px';
+        this.el.fab.style.top = '72px';
+        this.buildTabs();
+        this.bind();
+        document.body.appendChild(host);
+        this.mounted = true;
+        log('面板已挂载');
+      } catch (err) {
+        logError('Panel.mount', err);
+      }
+    },
+
+    /** 构建 Tab 按钮 */
+    buildTabs() {
+      const self = this;
+      const tabs = this.tabList();
+      this.el.tabs.innerHTML = '';
+      tabs.forEach(function (name) {
+        const btn = document.createElement('button');
+        btn.className = 'bwp-tab';
+        btn.textContent = name;
+        btn.dataset.tab = name;
+        btn.addEventListener('click', function () { self.switchTab(name); });
+        self.el.tabs.appendChild(btn);
+      });
+      this.syncTabs();
+    },
+
+    /** Tab 列表：阶段 5 会追加「报告」 */
+    tabList() {
+      return ['今日', '本周', '全部'];
+    },
+
+    /** 同步 Tab 高亮 */
+    syncTabs() {
+      const self = this;
+      Array.prototype.forEach.call(this.el.tabs.querySelectorAll('.bwp-tab'), function (btn) {
+        btn.classList.toggle('active', btn.dataset.tab === self.current);
+      });
+    },
+
+    /** 绑定交互事件 */
+    bind() {
+      const self = this;
+      this.el.fab.addEventListener('click', function () { self.toggle(); });
+      this.el.close.addEventListener('click', function () { self.hide(); });
+      this.el.footer.addEventListener('click', function (e) {
+        const act = e.target && e.target.dataset ? e.target.dataset.act : '';
+        if (act === 'export') self.exportJSON();
+        if (act === 'clear') self.clearAll();
+      });
+      // ESC 关闭
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && self.open) self.hide();
+      });
+      // 浮动按钮拖动（位置持久化，关闭按钮固定不动）
+      this.bindFabDrag();
+    },
+
+    /** 浮动按钮拖拽：拖动结束后吸附到最近的左右边缘 */
+    bindFabDrag() {
+      const fab = this.el.fab;
+      if (!fab) return;
+      const self = this;
+      let dragging = false, moved = false, startX = 0, startY = 0;
+      try {
+        const saved = GM_getValue('fabPos', null);
+        if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) self.placeFab(saved.x, saved.y);
+      } catch (err) { /* 位置读取失败用默认值 */ }
+
+      fab.addEventListener('pointerdown', function (e) {
+        dragging = true; moved = false;
+        startX = e.clientX - fab.offsetLeft;
+        startY = e.clientY - fab.offsetTop;
+        fab.style.cursor = 'grabbing';
+        if (fab.setPointerCapture) { try { fab.setPointerCapture(e.pointerId); } catch (err) { /* 忽略 */ } }
+      });
+      fab.addEventListener('pointermove', function (e) {
+        if (!dragging) return;
+        if (Math.abs(e.clientX - (startX + fab.offsetLeft)) > 4 || Math.abs(e.clientY - (startY + fab.offsetTop)) > 4) moved = true;
+        self.placeFab(e.clientX - startX, e.clientY - startY);
+      });
+      fab.addEventListener('pointerup', function () {
+        dragging = false;
+        fab.style.cursor = 'grab';
+        if (!moved) return;
+        // 吸附到最近的左右边缘
+        const left = fab.offsetLeft < (window.innerWidth - fab.offsetWidth) / 2;
+        const x = left ? 12 : window.innerWidth - fab.offsetWidth - 12;
+        const y = Math.min(Math.max(fab.offsetTop, 60), window.innerHeight - fab.offsetHeight - 12);
+        self.placeFab(x, y, true);
+        fab.dataset.dragged = '1';
+      });
+      // 拖动后不触发点击开关
+      fab.addEventListener('click', function (e) {
+        if (fab.dataset.dragged === '1') { e.stopImmediatePropagation(); fab.dataset.dragged = ''; }
+      }, true);
+    },
+
+    /** 设置浮动按钮位置并持久化 */
+    placeFab(x, y, persist) {
+      const fab = this.el.fab;
+      if (!fab) return;
+      const maxX = Math.max(0, window.innerWidth - fab.offsetWidth - 4);
+      const maxY = Math.max(0, window.innerHeight - fab.offsetHeight - 4);
+      const nx = Math.min(Math.max(0, x), maxX);
+      const ny = Math.min(Math.max(0, y), maxY);
+      fab.style.left = nx + 'px';
+      fab.style.top = ny + 'px';
+      fab.style.right = 'auto';
+      fab.style.bottom = 'auto';
+      if (persist) {
+        try { GM_setValue('fabPos', { x: nx, y: ny }); } catch (err) { /* 忽略 */ }
+      }
+    },
+
+    toggle() { this.open ? this.hide() : this.show(); },
+
+    /** 打开面板并渲染当前 Tab */
+    show(tab) {
+      const self = this;
+      safe(function () {
+        if (!self.mounted || !self.host || !document.documentElement.contains(self.host)) self.mount();
+        if (tab) self.current = tab;
+        self.syncTabs();
+        self.el.panel.classList.add('open');
+        self.open = true;
+        self.render();
+      }, 'Panel.show');
+    },
+
+    /** 关闭面板并销毁图表，防止内存泄漏 */
+    hide() {
+      const self = this;
+      safe(function () {
+        self.el.panel.classList.remove('open');
+        self.open = false;
+        self.destroyCharts();
+      }, 'Panel.hide');
+    },
+
+    /** 切换 Tab（关闭时清图表，打开时才渲染） */
+    switchTab(name) {
+      this.current = name;
+      this.syncTabs();
+      this.destroyCharts();
+      if (this.open) this.render();
+    },
+
+    /** 销毁全部 Chart 实例 */
+    destroyCharts() {
+      Object.keys(this.charts).forEach(function (k) {
+        try { if (this.charts[k]) this.charts[k].destroy(); } catch (err) { /* 忽略 */ }
+        delete this.charts[k];
+      }, this);
+    },
+
+    /** 渲染当前 Tab */
+    render() {
+      if (!this.open) return;
+      const self = this;
+      safe(function () {
+        self.el.body.innerHTML = '';
+        if (self.current === '今日') self.renderToday();
+        else if (self.current === '本周') self.renderWeek();
+        else if (self.current === '全部') self.renderAll();
+        else if (self.current === '报告' && typeof renderReport === 'function') self.renderReportTab();
+      }, 'Panel.render.' + self.current);
+    },
+
+    /** 今日 Tab */
+    renderToday() {
+      const data = Stats.today();
+      if (data.count === 0) { this.empty('今天还没有观看记录'); return; }
+      this.el.body.appendChild(this.cards([
+        { num: formatDuration(data.seconds), lbl: '今日总时长' },
+        { num: String(data.count), lbl: '今日视频数' },
+      ]));
+      this.el.body.appendChild(this.subTitle('按 UP 主分布'));
+      const box = this.chartBox('todayUploader');
+      this.el.body.appendChild(box);
+      this.makeChart('todayUploader', {
+        type: 'doughnut',
+        data: {
+          labels: data.byUploader.slice(0, 8).map(function (u) { return u.name; }),
+          datasets: [{
+            data: data.byUploader.slice(0, 8).map(function (u) { return Math.round(u.seconds); }),
+            backgroundColor: CHART_COLORS,
+            borderWidth: 0,
+          }],
+        },
+        options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } } },
+      });
+    },
+
+    /** 本周 Tab */
+    renderWeek() {
+      const data = Stats.week();
+      this.el.body.appendChild(this.cards([
+        { num: formatDuration(data.totalSeconds), lbl: '近7天总时长' },
+        { num: data.weekKey, lbl: '本周（周一起）' },
+      ]));
+      this.el.body.appendChild(this.subTitle('近 7 天每日时长'));
+      this.el.body.appendChild(this.chartBox('weekDaily'));
+      this.makeChart('weekDaily', {
+        type: 'line',
+        data: {
+          labels: data.daily.map(function (d) { return d.label; }),
+          datasets: [{
+            label: '分钟',
+            data: data.daily.map(function (d) { return Math.round(d.seconds / 60); }),
+            borderColor: CHART_COLORS[0],
+            backgroundColor: 'rgba(251,114,153,.15)',
+            fill: true, tension: .35, pointRadius: 3,
+          }],
+        },
+        options: { plugins: { legend: { display: false } } },
+      });
+      this.el.body.appendChild(this.subTitle('本周 Top5 UP 主'));
+      if (data.topUploaders.length === 0) {
+        this.el.body.appendChild(this.emptyNode('本周暂无数据'));
+        return;
+      }
+      this.el.body.appendChild(this.chartBox('weekUploader'));
+      this.makeChart('weekUploader', {
+        type: 'bar',
+        data: {
+          labels: data.topUploaders.map(function (u) { return u.name; }),
+          datasets: [{
+            label: '分钟',
+            data: data.topUploaders.map(function (u) { return Math.round(u.seconds / 60); }),
+            backgroundColor: CHART_COLORS.slice(0, data.topUploaders.length),
+            borderRadius: 6,
+          }],
+        },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+      });
+    },
+
+    /** 全部 Tab */
+    renderAll() {
+      const data = Stats.all();
+      if (data.count === 0) { this.empty('还没有任何观看记录'); return; }
+      this.el.body.appendChild(this.cards([
+        { num: formatDuration(data.seconds), lbl: '累计总时长' },
+        { num: String(data.count), lbl: '总视频数' },
+        { num: String(data.uploaderCount), lbl: '覆盖UP主' },
+      ]));
+      this.el.body.appendChild(this.subTitle('最近 20 条观看记录'));
+      const list = document.createElement('div');
+      list.className = 'bwp-list';
+      data.recent.forEach(function (r) {
+        const item = document.createElement('div');
+        item.className = 'bwp-item';
+        const t = document.createElement('div');
+        t.className = 't';
+        t.textContent = r.videoTitle || r.bvid || '未知视频';
+        const m = document.createElement('div');
+        m.className = 'm';
+        const left = document.createElement('span');
+        left.textContent = (r.uploader || '未知UP主') + ' · ' + formatDuration(r.watchedSeconds);
+        const right = document.createElement('span');
+        right.textContent = r.date;
+        m.appendChild(left); m.appendChild(right);
+        item.appendChild(t); item.appendChild(m);
+        list.appendChild(item);
+      });
+      this.el.body.appendChild(list);
+    },
+
+    /* ---------- 小组件 ---------- */
+
+    cards(items) {
+      const wrap = document.createElement('div');
+      wrap.className = 'bwp-cards';
+      items.forEach(function (it) {
+        const c = document.createElement('div');
+        c.className = 'bwp-card';
+        const n = document.createElement('div');
+        n.className = 'num';
+        n.textContent = it.num;
+        const l = document.createElement('div');
+        l.className = 'lbl';
+        l.textContent = it.lbl;
+        c.appendChild(n); c.appendChild(l);
+        wrap.appendChild(c);
+      });
+      return wrap;
+    },
+
+    subTitle(text) {
+      const el = document.createElement('div');
+      el.className = 'bwp-sub';
+      el.textContent = text;
+      return el;
+    },
+
+    chartBox(id) {
+      const box = document.createElement('div');
+      box.className = 'bwp-chart';
+      const cv = document.createElement('canvas');
+      cv.id = id;
+      box.appendChild(cv);
+      return box;
+    },
+
+    empty(text) {
+      this.el.body.appendChild(this.emptyNode(text));
+    },
+
+    emptyNode(text) {
+      const el = document.createElement('div');
+      el.className = 'bwp-empty';
+      const dot = document.createElement('div');
+      dot.className = 'dot';
+      dot.textContent = '📺';
+      const t = document.createElement('div');
+      t.textContent = text;
+      el.appendChild(dot); el.appendChild(t);
+      return el;
+    },
+
+    /** 创建一个 Chart 实例并登记（懒加载） */
+    makeChart(key, config) {
+      try {
+        if (typeof Chart === 'undefined') {
+          const box = this.root.querySelector('#' + key);
+          if (box && box.parentNode) {
+            const tip = this.emptyNode('图表库未加载，请检查网络后刷新');
+            box.parentNode.replaceChild(tip, box);
+          }
+          return;
+        }
+        const canvas = this.root.querySelector('#' + key);
+        if (!canvas) return;
+        config.options = config.options || {};
+        config.options.responsive = true;
+        config.options.maintainAspectRatio = false;
+        config.options.animation = { duration: 300 };
+        this.charts[key] = new Chart(canvas.getContext('2d'), config);
+      } catch (err) {
+        logError('Panel.makeChart.' + key, err);
+      }
+    },
+
+    /* ---------- 数据管理 ---------- */
+
+    exportJSON() {
+      try {
+        const payload = {
+          exportedAt: new Date().toISOString(),
+          schemaVersion: CONFIG.SCHEMA_VERSION,
+          watchRecords: Store.getRecords(),
+          watchRecordsArchive: Store.getArchive(),
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        this.downloadBlob(blob, 'bwp-backup-' + todayStr() + '.json');
+        log('已导出 JSON 备份');
+      } catch (err) {
+        logError('Panel.exportJSON', err);
+      }
+    },
+
+    clearAll() {
+      try {
+        if (!window.confirm('确定要清空全部本地观看数据吗？此操作不可恢复。')) return;
+        if (!window.confirm('再次确认：清空后无法找回，建议先导出 JSON 备份。确定继续？')) return;
+        Store.clearAll();
+        this.destroyCharts();
+        this.render();
+      } catch (err) {
+        logError('Panel.clearAll', err);
+      }
+    },
+
+    /** 通用 Blob 下载 */
+    downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () {
+        URL.revokeObjectURL(url);
+        if (a.parentNode) a.parentNode.removeChild(a);
+      }, 1000);
+    },
+  };
+
+
 
   /* ============================================================
    * ⑧ Report 本周报告区
@@ -897,7 +1542,11 @@
   /** SPA 路由守护：根据当前路径自动启停采集 */
   function ensureCollector() {
     if (Collector.isVideoPage()) {
+      const key = location.pathname + location.search;
+      // 同一视频页会话保持，不重复重启，避免 openCount 重复累加
       if (!Collector.active) Collector.start();
+      if (!Panel.mounted) safe(function () { Panel.mount(); }, 'Panel.mount.spa');
+      else if (Collector._sessionKey !== key) Collector.start();
     } else if (Collector.active) {
       Collector.stop(true);
     }
@@ -917,7 +1566,10 @@
         safe(function () { ensureCollector(); }, 'ensureCollector.tick');
       }, 2000);
 
-      // 阶段 4/5 将在此接入 UI 与报告
+      // 阶段 4：仅在视频页挂载面板（图表懒加载，仅打开时渲染）
+      if (Collector.isVideoPage()) {
+        safe(function () { Panel.mount(); }, 'Panel.mount');
+      }
     }, 'bootstrap');
   }
 
