@@ -1,0 +1,161 @@
+async (page) => {
+  const passed=[];
+  await page.emulateMedia({colorScheme:'light', reducedMotion:'no-preference'});
+  const check=(ok,name)=>{if(!ok)throw Error(name);passed.push(name);};
+  await page.setViewportSize({width:1280,height:800});
+  await page.reload();
+  await page.getByRole('button',{name:'打开B站观看数据面板'}).click();
+  await page.getByRole('button',{name:'本周',exact:true}).click();
+  await page.getByRole('button',{name:'打开设置'}).click();
+  await page.getByLabel('主题', {exact:false}).selectOption('dark');
+  await page.getByLabel('面板宽度',{exact:true}).last().fill('520');
+  check(await page.evaluate(()=>testApi.Panel.el.panel.offsetWidth===520),'UI-02 宽度实时应用');
+  await page.getByRole('button',{name:'← 返回统计'}).click();
+  check(await page.evaluate(()=>testApi.Panel.current==='本周' && testApi.Panel.tabList().length===4),'UI-01 原 Tab/四个统计入口');
+  check(await page.evaluate(()=>Object.values(testApi.Panel.charts).every(c=>c.options.color==='#c2c7d0')),'TH-04 深色 Chart.js 配色');
+  await page.getByRole('button',{name:'打开设置'}).click();
+  await page.getByLabel('主题', {exact:false}).selectOption('system');
+  await page.emulateMedia({colorScheme:'light'});
+  await page.waitForFunction(()=>testApi.Panel.host.dataset.theme==='light');
+  check(await page.evaluate(()=>testApi.Panel.host.dataset.theme==='light'),'TH-02 系统浅色');
+  await page.emulateMedia({colorScheme:'dark'});
+  await page.waitForFunction(()=>testApi.Panel.host.dataset.theme==='dark');
+  check(true,'TH-02 系统深色实时响应');
+  await page.getByRole('button',{name:'← 返回统计'}).click();
+  await page.emulateMedia({colorScheme:'light'});
+  await page.waitForFunction(()=>testApi.Panel.host.dataset.theme==='light');
+  check(await page.evaluate(()=>Object.values(testApi.Panel.charts).every(c=>c.options.color==='#61666d')),'TH-04 可见图表随系统切浅色');
+  await page.emulateMedia({colorScheme:'dark'});
+  await page.waitForFunction(()=>testApi.Panel.host.dataset.theme==='dark');
+  check(await page.evaluate(()=>Object.values(testApi.Panel.charts).every(c=>c.options.color==='#c2c7d0')),'TH-04 可见图表随系统切深色');
+  await page.getByRole('button',{name:'打开设置'}).click();
+  await page.getByLabel('主题', {exact:false}).selectOption('light');
+  await page.emulateMedia({colorScheme:'dark'});
+  check(await page.evaluate(()=>testApi.Panel.host.dataset.theme==='light'),'TH-02 手动主题不受系统覆盖');
+  await page.getByLabel('主题', {exact:false}).selectOption('dark');
+  await page.getByRole('checkbox',{name:'面板快捷键'}).check();
+  await page.getByLabel('主题', {exact:false}).focus();
+  await page.keyboard.press('Alt+Shift+W');
+  check(await page.evaluate(()=>testApi.Panel.open),'OP-05 设置 select 不触发快捷键');
+  await page.getByRole('textbox',{name:'页面输入框'}).focus();
+  await page.keyboard.press('Alt+Shift+W');
+  check(await page.evaluate(()=>testApi.Panel.open),'OP-05 页面 input 不触发快捷键');
+  await page.locator('[contenteditable]').focus();
+  await page.keyboard.press('Alt+Shift+W');
+  check(await page.evaluate(()=>testApi.Panel.open),'OP-05 contenteditable 不触发快捷键');
+  await page.getByRole('button',{name:'打开设置'}).focus();
+  await page.keyboard.press('Escape');
+  check(await page.evaluate(()=>testApi.Panel.open && testApi.Panel.view==='stats' && testApi.Panel.root.activeElement===testApi.Panel.el.settings),'OP-06 Esc 返回统计及焦点');
+  await page.keyboard.press('Escape');
+  check(await page.evaluate(()=>!testApi.Panel.open && testApi.Panel.el.panel.inert),'OP-06 再次 Esc 关闭面板且禁用隐藏控件焦点');
+  await page.keyboard.press('Alt+Shift+W');
+  check(await page.evaluate(()=>testApi.Panel.open),'OP-04 快捷键打开');
+  await page.evaluate(()=>document.dispatchEvent(new KeyboardEvent('keydown',{key:'W',altKey:true,shiftKey:true,repeat:true,bubbles:true,composed:true})));
+  check(await page.evaluate(()=>testApi.Panel.open),'OP-04 按键连发不切换');
+  await page.keyboard.press('Alt+Shift+W');
+  check(await page.evaluate(()=>!testApi.Panel.open),'OP-04 快捷键关闭');
+  await page.getByRole('button',{name:'打开B站观看数据面板'}).click();
+  await page.getByRole('button',{name:'打开设置'}).click();
+  const snapshot=await page.evaluate(()=>JSON.stringify(Object.entries(localStorage).filter(([k])=>k!=='uiSettings' && k!=='fabPos')));
+  await page.getByRole('checkbox',{name:'每周报告提醒'}).uncheck();
+  await page.getByRole('button',{name:'恢复默认外观（主题、宽度、尺寸、位置）'}).click();
+  check(await page.evaluate(()=>{const s=GM_getValue('uiSettings');return s.theme==='system'&&s.panelWidth===380&&s.fabSize===48&&!s.weeklyReminder&&s.shortcutEnabled;}),'UI-06 恢复只影响外观');
+  check(snapshot===await page.evaluate(()=>JSON.stringify(Object.entries(localStorage).filter(([k])=>k!=='uiSettings' && k!=='fabPos'))),'S-05 外观设置不改旧数据');
+  await page.evaluate(()=>{window.failWrite=true;});
+  await page.getByLabel('主题', {exact:false}).selectOption('light');
+  check(await page.evaluate(()=>testApi.Panel.root.querySelector('.bwp-setting-status').textContent.includes('保存失败') && testApi.Panel.root.querySelector('[name=theme]').value==='system'),'UI-08 写失败回滚');
+  await page.evaluate(()=>{window.failWrite=false;});
+  const writes=await page.evaluate(()=>testWrites.length);
+  await page.getByRole('button',{name:'开始检查'}).click();
+  check(await page.evaluate(()=>testApi.Panel.healthResult.status==='ok' && testWrites.length)===writes,'HC-07 健康扫描无写入');
+  await page.evaluate(()=>{window.failRead='watchRecords';});
+  await page.getByRole('button',{name:'开始检查'}).click();
+  check(await page.evaluate(()=>testApi.Panel.healthResult.status==='incomplete' && testApi.Panel.root.querySelector('.bwp-health').textContent.includes('存储读取失败')),'HC-02 读取异常不误报健康');
+  await page.evaluate(()=>{window.failRead='';});
+  await page.getByRole('button',{name:'开始检查'}).click();
+  await page.getByLabel('主题', {exact:false}).selectOption('dark');
+  await page.getByLabel('悬浮按钮尺寸', {exact:false}).selectOption('56');
+  await page.getByRole('button',{name:'重置按钮位置'}).click();
+  check(await page.evaluate(()=>!localStorage.getItem('fabPos') && parseFloat(testApi.Panel.el.fab.style.left)===innerWidth-56-16),'UI-05 重置位置及 key');
+  await page.evaluate(()=>{testApi.Panel.el.body.scrollTop=0;});
+  await page.screenshot({path:'output/playwright/settings-dark-top.png'});
+  for(const size of [320,380,520]) {
+    await page.getByLabel('面板宽度',{exact:true}).last().fill(String(size));
+    for(const width of [320,420,800]) {
+      await page.setViewportSize({width,height:600});
+      await page.waitForTimeout(150);
+      check(await page.evaluate(()=>{const p=testApi.Panel.el.panel,b=testApi.Panel.el.body,f=testApi.Panel.el.fab.getBoundingClientRect();return p.offsetWidth<=innerWidth && b.scrollWidth<=b.clientWidth && f.left>=0 && f.right<=innerWidth && f.bottom<=innerHeight;}),`TH-06/UI-04 width ${size}, viewport ${width}`);
+    }
+  }
+  check(await page.evaluate(()=>Math.abs(testApi.Panel.el.fab.getBoundingClientRect().right-(innerWidth-12))<2),'UI-04 窗口变窄后变宽仍保持右侧锚点');
+  await page.setViewportSize({width:320,height:600});
+  await page.screenshot({path:'output/playwright/settings-narrow.png'});
+  await page.setViewportSize({width:1280,height:800});
+  await page.getByRole('button',{name:'← 返回统计'}).click();
+  await page.getByRole('button',{name:'全部',exact:true}).click();
+  const search=page.locator('#bwp-host').locator('input[type=search],input[type=text]').first();
+  if(await search.count()) {
+    await search.fill('合成');
+    await page.getByRole('button',{name:'打开设置'}).click();
+    await page.getByLabel('主题',{exact:false}).selectOption('light');
+    await page.getByRole('button',{name:'← 返回统计'}).click();
+    check(await page.evaluate(()=>testApi.Panel.allQuery==='合成'),'UI-02 保留全部页搜索词');
+  }
+  const detail=page.getByRole('button',{name:'查看观看记录详情'}).first();
+  await detail.click();
+  await page.keyboard.press('Escape');
+  check(await page.evaluate(()=>testApi.Panel.open && !testApi.Panel.detailDrawer),'OP-06 详情 Esc 只关内层');
+  await page.getByRole('button',{name:'打开设置'}).click();
+  await page.getByLabel('主题',{exact:false}).selectOption('dark');
+  await page.getByRole('button',{name:'← 返回统计'}).click();
+  // 在隔离页临时固定到周日，验证提醒去重；完成后恢复真实 Date。
+  const reminderResult = await page.evaluate(() => {
+    const NativeDate = window.Date;
+    window.Date = class extends NativeDate {
+      constructor(...args) { super(...(args.length ? args : ['2026-10-04T12:00:00+08:00'])); }
+    };
+    try {
+      const {Store,Panel,maybeShowWeeklyReminder} = testApi;
+      GM_deleteValue('lastReminderWeek'); Store.setUiSettings({weeklyReminder:false});
+      maybeShowWeeklyReminder();
+      const disabled = !GM_getValue('lastReminderWeek','') && !Panel.root.querySelector('.bwp-toast');
+      Store.setUiSettings({weeklyReminder:true}); maybeShowWeeklyReminder();
+      const marker=GM_getValue('lastReminderWeek','');
+      const shown=!!Panel.root.querySelector('.bwp-toast') && !!marker;
+      Store.setUiSettings({weeklyReminder:false}); Panel.applyUiSettings();
+      const removed=!Panel.root.querySelector('.bwp-toast') && GM_getValue('lastReminderWeek','')===marker;
+      Store.setUiSettings({weeklyReminder:true}); maybeShowWeeklyReminder();
+      return {disabled,shown,removed,dedup:!Panel.root.querySelector('.bwp-toast')};
+    } finally { window.Date=NativeDate; }
+  });
+  check(reminderResult.disabled,'OP-01 关闭提醒不写提醒周');
+  check(reminderResult.shown,'OP-03 尚未提醒的周可显示');
+  check(reminderResult.removed,'OP-02 关闭立即移除 toast，保持周标记');
+  check(reminderResult.dedup,'OP-03 重新开启不重复提醒');
+  await page.evaluate(()=>{GM_setValue('fabPos',{x:12,y:160});testApi.Panel.placeFab(12,160);});
+  await page.getByRole('button',{name:'打开设置'}).click();
+  await page.getByRole('button',{name:'重置按钮位置'}).click();
+  await page.getByRole('button',{name:'← 返回统计'}).click();
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.getByRole('button',{name:'今日',exact:true}).click();
+  check(await page.evaluate(()=>Object.values(testApi.Panel.charts).every(c=>c.config.options.animation===false)),'TH-07 减少动画禁用 Chart.js 动画');
+  await page.getByRole('button',{name:'报告',exact:true}).click();
+  await page.waitForTimeout(500);
+  check(await page.evaluate(()=>{
+    const c=testApi.Panel.charts.reportDaily;
+    testApi.Panel.colorChart(c.config.options,false);c.stop();c.update('none');
+    const pixels=c.ctx.getImageData(0,0,c.canvas.width,c.canvas.height).data;
+    let visible=0;for(let i=3;i<pixels.length;i+=4)if(pixels[i])visible++;
+    testApi.Panel.colorChart(c.config.options,true);c.update('none');
+    return visible>100;
+  }),'TH-05 浅色截图画布包含图表像素');
+  const downloadPromise=page.waitForEvent('download');
+  await page.getByRole('button',{name:'导出图片'}).click();
+  const download=await downloadPromise;
+  await download.saveAs('output/playwright/report-dark-export.png');
+  check(await page.evaluate(()=>testApi.Panel.host.dataset.theme==='dark' && testApi.Panel.charts.reportDaily.options.color==='#c2c7d0' && !document.querySelector('.bwp-export')),'TH-05 导出后恢复深色图表并清理临时容器');
+  await page.screenshot({path:'output/playwright/report-dark.png'});
+  await page.reload();
+  check(await page.evaluate(()=>testApi.Store.getUiSettings().theme==='dark' && testApi.Store.getUiSettings().fabSize===56),'UI-03/04 刷新持久化');
+  return {browser:page.context().browser().version(),passed};
+}

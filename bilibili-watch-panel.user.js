@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili Watch Panel
 // @namespace    https://github.com/Gavin-gwj/bilibili-watch-panel
-// @version      0.7.1
+// @version      0.8.0
 // @description  本地B站观看数据统计与可视化面板
 // @author       Gavin-gwj
 // @match        https://*.bilibili.com/*
@@ -75,6 +75,7 @@
       ARCHIVE_NOTICE: 'archiveNotice',
       FAB_POS: 'fabPos',
       WEEKLY_GOAL: 'weeklyGoalSeconds',
+      UI_SETTINGS: 'uiSettings',
     },
     /** 当前数据结构版本 */
     SCHEMA_VERSION: 3,
@@ -279,7 +280,7 @@
     if (!s || typeof s !== 'object') return null;
     const startAt = Number(s.startAt);
     const endAt = Number(s.endAt);
-    if (!(startAt > 0) || !(endAt >= startAt)) return null;
+    if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || !(startAt > 0) || !(endAt >= startAt)) return null;
     const reason = ['ended', 'pause', 'hidden', 'route', 'pagehide', 'unload', 'unknown'].indexOf(s.endReason) >= 0
       ? s.endReason : 'unknown';
     return {
@@ -338,7 +339,103 @@
     };
   }
 
+  const DEFAULT_UI_SETTINGS = Object.freeze({
+    theme: 'system', panelWidth: 380, fabSize: 48, weeklyReminder: true, shortcutEnabled: false,
+  });
+
+  function normalizeUiSettings(raw) {
+    const proto = raw && typeof raw === 'object' ? Object.getPrototypeOf(raw) : undefined;
+    const plain = raw && Object.prototype.toString.call(raw) === '[object Object]'
+      && (proto === null || Object.getPrototypeOf(proto) === null);
+    const value = plain ? raw : {};
+    return {
+      theme: ['system', 'light', 'dark'].includes(value.theme) ? value.theme : DEFAULT_UI_SETTINGS.theme,
+      panelWidth: Number.isFinite(value.panelWidth)
+        ? Math.round(Math.min(520, Math.max(320, value.panelWidth)) / 20) * 20 : DEFAULT_UI_SETTINGS.panelWidth,
+      fabSize: [40, 48, 56].includes(value.fabSize) ? value.fabSize : DEFAULT_UI_SETTINGS.fabSize,
+      weeklyReminder: typeof value.weeklyReminder === 'boolean' ? value.weeklyReminder : true,
+      shortcutEnabled: typeof value.shortcutEnabled === 'boolean' ? value.shortcutEnabled : false,
+    };
+  }
+
+  /** 原始存储只读检查；记录/会话均有预算，避免外部写入巨量数据卡住页面。 */
+  function inspectRecordStorage(rawRecords, rawArchive, archiveNotice) {
+    const result = { status: 'ok', scannedAt: Date.now(), counts: { records: 0, archive: 0 }, findings: [] };
+    const groups = new Map();
+    let sessionBudget = 100000;
+    const add = (code, source, count, extra) => {
+      if (count) result.findings.push(Object.assign({ code, source, count }, extra));
+    };
+    for (const [source, raw, limit] of [
+      ['records', rawRecords, CONFIG.ARCHIVE_THRESHOLD], ['archive', rawArchive, CONFIG.ARCHIVE_MAX],
+    ]) {
+      if (!Array.isArray(raw)) { add('storage-format', source, 1); continue; }
+      result.counts[source] = raw.length;
+      let invalid = 0, numeric = 0, sessionFormat = 0, sessions = 0, scanned = 0;
+      for (; scanned < Math.min(raw.length, limit); scanned++) {
+        if (Date.now() - result.scannedAt > 100) break;
+        const r = raw[scanned];
+        if (!isValidRecord(r)) { invalid++; continue; }
+        const key = r.date + '\0' + r.bvid;
+        groups.set(key, (groups.get(key) || 0) + 1);
+        for (const field of ['durationSeconds', 'maxPositionSeconds']) {
+          if (Object.prototype.hasOwnProperty.call(r, field) && (!Number.isFinite(r[field]) || r[field] < 0)) numeric++;
+        }
+        if (Object.prototype.hasOwnProperty.call(r, 'sessions')) {
+          if (!Array.isArray(r.sessions)) sessionFormat++;
+          else {
+            let j = 0;
+            for (; j < r.sessions.length && sessionBudget > 0; j++, sessionBudget--) {
+              if (Date.now() - result.scannedAt > 100) break;
+              if (!sanitizeSession(r.sessions[j])) sessions++;
+            }
+            if (j < r.sessions.length) result.status = 'incomplete';
+          }
+        }
+      }
+      if (scanned < raw.length) result.status = 'incomplete';
+      add('invalid-record', source, invalid);
+      add('invalid-number', source, numeric);
+      add('sessions-format', source, sessionFormat);
+      add('invalid-session', source, sessions);
+    }
+    const duplicates = Array.from(groups.values()).filter(n => n > 1);
+    add('duplicate-record', 'combined', duplicates.length, { involved: duplicates.reduce((a, n) => a + n, 0) });
+    if (archiveNotice && archiveNotice.dropped > 0) add('archive-trimmed', 'archive', archiveNotice.dropped);
+    if (result.status === 'incomplete') add('scan-limit', 'combined', 1);
+    else if (result.findings.length) result.status = 'issues';
+    return result;
+  }
+
   const Store = {
+    getUiSettings() {
+      try { return normalizeUiSettings(GM_getValue(CONFIG.KEYS.UI_SETTINGS, null)); }
+      catch (err) { logError('Store.getUiSettings', err); return normalizeUiSettings(null); }
+    },
+
+    setUiSettings(partial) {
+      try {
+        const value = normalizeUiSettings(Object.assign({}, this.getUiSettings(), partial));
+        GM_setValue(CONFIG.KEYS.UI_SETTINGS, value);
+        if (JSON.stringify(this.getUiSettings()) !== JSON.stringify(value)) throw new Error('设置写入未生效');
+        return true;
+      } catch (err) { logError('Store.setUiSettings', err); return false; }
+    },
+
+    inspectHealth() {
+      const errors = [];
+      const read = (key, fallback, source) => {
+        try { return GM_getValue(key, fallback); }
+        catch (err) { errors.push({ code: 'read-error', source, count: 1 }); return fallback; }
+      };
+      const records = read(CONFIG.KEYS.RECORDS, [], 'records');
+      const archive = read(CONFIG.KEYS.ARCHIVE, [], 'archive');
+      const notice = read(CONFIG.KEYS.ARCHIVE_NOTICE, null, 'archiveNotice');
+      const result = inspectRecordStorage(records, archive, notice);
+      if (errors.length) { result.status = 'incomplete'; result.findings.push(...errors); }
+      return result;
+    },
+
     /** 读取主记录，自动过滤坏数据 */
     getRecords() {
       try {
@@ -1594,6 +1691,14 @@
     ':host { --bwp-font: "PingFang SC", -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; }',
   ];
 
+  const DARK_TOKENS_CSS = ':host([data-theme="dark"]) { color-scheme: dark;'
+    + '--bwp-bg:#17191f;--bwp-surface:#22252d;--bwp-surface-muted:#2c303a;'
+    + '--bwp-border:#393e4a;--bwp-border-strong:#555e6d;'
+    + '--bwp-text:#f1f2f5;--bwp-text-2:#c2c7d0;--bwp-text-3:#a0a8b7;--bwp-text-4:#798393;'
+    + '--bwp-pink-strong:#ff9bb8;--bwp-pink-soft:#3d2733;--bwp-pink-border:#704252;'
+    + '--bwp-danger:#ff9bb8;--bwp-danger-soft:#3d2733;'
+    + '--bwp-shadow-sm:0 1px 4px #0003;--bwp-shadow-md:0 6px 18px #0006;}';
+
   /** 图表色板：B 站粉及近似色系 */
   const CHART_COLORS = ['#fb7299', '#ffb0c9', '#e05c82', '#ffd6e2', '#b84466', '#f7a2bb', '#c9ccd1'];
 
@@ -1602,17 +1707,19 @@
     '<style>',
     ':host { all: initial; }',
     ...TOKENS_CSS,
+    DARK_TOKENS_CSS,
+    ':host { color-scheme: light; --bwp-panel-width: 380px; --bwp-fab-size: 48px; }',
     ':host, * { box-sizing: border-box; }',
     '* { font-family: var(--bwp-font); -webkit-font-smoothing: antialiased; }',
     /* ---------- 浮动按钮（纯色强调，轻中性阴影） ---------- */
     '.bwp-fab {',
     '  position: fixed; z-index: 2147483000; cursor: grab; touch-action: none;',
-    '  width: 48px; height: 48px; padding: 0; border: none; border-radius: 14px;',
+    '  width: var(--bwp-fab-size); height: var(--bwp-fab-size); padding: 0; border: none; border-radius: 14px;',
     '  display: flex; align-items: center; justify-content: center;',
     '  background: var(--bwp-pink); color: #fff; box-shadow: var(--bwp-shadow-md);',
     '  transition: transform .22s cubic-bezier(.34,1.56,.64,1), box-shadow .22s ease, background .2s ease;',
     '}',
-    '.bwp-fab svg { width: 22px; height: 22px; display: block; pointer-events: none; }',
+    '.bwp-fab svg { width: calc(var(--bwp-fab-size) * .46); height: calc(var(--bwp-fab-size) * .46); display: block; pointer-events: none; }',
     '.bwp-fab:hover { transform: translateY(-1px) scale(1.05); background: var(--bwp-pink-strong); box-shadow: var(--bwp-shadow-pink); }',
     '.bwp-fab:active { transform: scale(.94); }',
     /* ---------- 焦点态（可访问性） ---------- */
@@ -1620,7 +1727,7 @@
     /* ---------- 抽屉面板（浅灰工作台背景） ---------- */
     '.bwp-panel {',
     '  position: fixed; top: 0; right: 0; z-index: 2147483001;',
-    '  width: 380px; max-width: 96vw; height: 100vh;',
+    '  width: var(--bwp-panel-width); max-width: 96vw; height: 100vh; height: 100dvh;',
     '  display: flex; flex-direction: column;',
     '  background: var(--bwp-bg);',
     '  border-left: 1px solid var(--bwp-border); border-radius: 16px 0 0 16px;',
@@ -1645,7 +1752,7 @@
     '.bwp-tab:hover { color: var(--bwp-pink); }',
     '.bwp-tab.active { background: var(--bwp-surface); color: var(--bwp-pink-strong); font-weight: 600; box-shadow: var(--bwp-shadow-sm); }',
     /* ---------- 内容区 ---------- */
-    '.bwp-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 14px 14px 20px; scrollbar-width: thin; scrollbar-color: var(--bwp-border-strong) transparent; }',
+    '.bwp-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 14px 20px; scrollbar-width: thin; scrollbar-color: var(--bwp-border-strong) transparent; }',
     '.bwp-body::-webkit-scrollbar { width: 6px; }',
     '.bwp-body::-webkit-scrollbar-thumb { background: var(--bwp-border-strong); border-radius: 3px; }',
     '.bwp-body::-webkit-scrollbar-track { background: transparent; }',
@@ -1683,7 +1790,7 @@
     '.bwp-tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 10.5px; line-height: 1.6; color: var(--bwp-text-2); background: var(--bwp-surface-muted); border: 1px solid var(--bwp-border); white-space: nowrap; }',
     '.bwp-tag.pink { color: var(--bwp-pink-strong); background: var(--bwp-pink-soft); border-color: var(--bwp-pink-border); font-weight: 600; }',
     /* ---------- 底部操作 ---------- */
-    '.bwp-footer { display: flex; gap: 9px; padding: 12px 16px 14px; border-top: 1px solid var(--bwp-border); background: var(--bwp-surface); }',
+    '.bwp-footer { display: flex; gap: 9px; flex-shrink: 0; padding: 12px 16px 14px; border-top: 1px solid var(--bwp-border); background: var(--bwp-surface); }',
     '.bwp-btn { flex: 1; min-width: 0; padding: 9px 0; border: 1px solid transparent; border-radius: var(--bwp-radius-sm); font-size: 12px; font-weight: 600; cursor: pointer; color: #fff; background: var(--bwp-pink); box-shadow: var(--bwp-shadow-sm); transition: transform .18s ease, box-shadow .18s ease, background .18s ease, color .18s ease; }',
     '.bwp-btn:hover { transform: translateY(-1px); background: var(--bwp-pink-strong); box-shadow: var(--bwp-shadow-pink); }',
     '.bwp-btn:active { transform: translateY(0) scale(.99); }',
@@ -1745,7 +1852,7 @@
     '.bwp-up-bar i { display: block; height: 100%; border-radius: 999px; background: var(--bwp-pink); transform-origin: left center; animation: bwp-bar .52s cubic-bezier(.22,.9,.3,1) backwards; }',
     '@media (max-width: 380px) { .bwp-today-up { flex-direction: column; align-items: stretch; } .bwp-today-up .bwp-donut { width: 100%; height: 150px; } }',
     /* ---------- 归档提示条 ---------- */
-    '.bwp-notice { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; padding: 9px 11px; border-radius: var(--bwp-radius-sm); border: 1px solid var(--bwp-pink-border); background: var(--bwp-pink-soft); font-size: 11px; line-height: 1.55; color: #b84466; }',
+    '.bwp-notice { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; padding: 9px 11px; border-radius: var(--bwp-radius-sm); border: 1px solid var(--bwp-pink-border); background: var(--bwp-pink-soft); font-size: 11px; line-height: 1.55; color: var(--bwp-pink-strong); }',
     '.bwp-notice button { flex: none; margin-left: auto; border: none; background: transparent; color: var(--bwp-pink-strong); font-size: 14px; line-height: 1; cursor: pointer; padding: 0 2px; }',
     /* ---------- 搜索框 ---------- */
     '.bwp-search { display: flex; align-items: center; gap: 8px; height: 36px; margin-bottom: 10px; padding: 0 12px; border-radius: var(--bwp-radius-sm); border: 1px solid var(--bwp-border-strong); background: var(--bwp-surface); transition: border-color .18s ease, box-shadow .18s ease; }',
@@ -1781,6 +1888,20 @@
     '.bwp-heat-legend { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: 0 0 12px; font-size: 10px; color: var(--bwp-text-3); }',
     '.bwp-heat-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--bwp-surface-muted); }',
     '.bwp-heat-legend i.lv1 { background: #ffe4ee; } .bwp-heat-legend i.lv2 { background: #ffc9d8; } .bwp-heat-legend i.lv3 { background: var(--bwp-pink); } .bwp-heat-legend i.lv4 { background: #d9436f; }',
+    '.bwp-header-actions { display:flex; gap:6px; flex:none; }',
+    'button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible { outline:2px solid var(--bwp-pink); outline-offset:2px; }',
+    '[hidden] { display:none !important; }',
+    '.bwp-settings { display:grid; gap:14px; color:var(--bwp-text); font-size:12px; }',
+    '.bwp-settings section { min-width:0; padding:14px; border:1px solid var(--bwp-border); border-radius:var(--bwp-radius-md); background:var(--bwp-surface); }',
+    '.bwp-settings h3 { margin:0 0 14px; font-size:14px; }',
+    '.bwp-setting { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:10px; margin:14px 0; }',
+    '.bwp-setting select { max-width:150px; padding:6px; border:1px solid var(--bwp-border-strong); border-radius:6px; background:var(--bwp-surface-muted); color:var(--bwp-text); }',
+    '.bwp-setting input[type="range"] { width:100%; grid-column:1 / -1; accent-color:var(--bwp-pink); }',
+    '.bwp-setting input[type="checkbox"] { width:18px; height:18px; accent-color:var(--bwp-pink); }',
+    '.bwp-settings .bwp-btn { display:block; width:100%; padding:9px 8px; margin-top:10px; white-space:normal; }',
+    '.bwp-settings p, .bwp-health { color:var(--bwp-text-2); line-height:1.7; overflow-wrap:anywhere; }',
+    '.bwp-health ul { padding-left:18px; }',
+    '.bwp-setting-status { min-height:18px; color:var(--bwp-pink-strong); }',
     '</style>',
     '<button class="bwp-fab" title="B站观看数据面板" aria-label="打开B站观看数据面板">',
     '  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M2 20h20"/></svg>',
@@ -1794,7 +1915,7 @@
     '        <span class="bwp-subtitle">仅存本机 · 不上传</span>',
     '      </span>',
     '    </div>',
-    '    <button class="bwp-close" title="关闭" aria-label="关闭面板">×</button>',
+    '    <div class="bwp-header-actions"><button type="button" class="bwp-settings-entry bwp-close" title="设置" aria-label="打开设置">⚙</button><button type="button" class="bwp-close" title="关闭" aria-label="关闭面板">×</button></div>',
     '  </header>',
     '  <nav class="bwp-tabs"></nav>',
     '  <div class="bwp-body"></div>',
@@ -1813,6 +1934,8 @@
     el: {},
     charts: {},
     current: '今日',
+    view: 'stats',
+    healthResult: null,
     allQuery: '',
     qualityFilter: 'all',
     allSort: 'recent',
@@ -1839,7 +1962,10 @@
         this.root = root;
         this.el.fab = root.querySelector('.bwp-fab');
         this.el.panel = root.querySelector('.bwp-panel');
-        this.el.close = root.querySelector('.bwp-close');
+        this.el.panel.inert = !this.open;
+        this.el.panel.classList.toggle('open', this.open);
+        this.el.close = root.querySelector('.bwp-header-actions .bwp-close:last-child');
+        this.el.settings = root.querySelector('.bwp-settings-entry');
         this.el.tabs = root.querySelector('.bwp-tabs');
         this.el.body = root.querySelector('.bwp-body');
         this.el.footer = root.querySelector('.bwp-footer');
@@ -1851,6 +1977,7 @@
 
         // 先挂载再测量，避免浏览器缩放后使用错误的按钮尺寸计算位置。
         document.body.appendChild(host);
+        this.applyUiSettings();
         this.placeFab(window.innerWidth - this.el.fab.offsetWidth - 16, 72);
         this.buildTabs();
         this.bind();
@@ -1859,6 +1986,170 @@
       } catch (err) {
         logError('Panel.mount', err);
       }
+    },
+
+    /** 即时应用外观，不重建内容，保留搜索、详情、焦点及滚动状态。 */
+    applyUiSettings() {
+      const settings = Store.getUiSettings();
+      const dark = settings.theme === 'dark' || (settings.theme === 'system'
+        && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      this.host.dataset.theme = dark ? 'dark' : 'light';
+      this.host.style.setProperty('--bwp-panel-width', settings.panelWidth + 'px');
+      this.host.style.setProperty('--bwp-fab-size', settings.fabSize + 'px');
+      const fab = this.el.fab;
+      if (fab.style.left) {
+        const x = parseFloat(fab.style.left), y = parseFloat(fab.style.top);
+        const rightSide = this._fabSide === 'right';
+        this.placeFab(rightSide ? window.innerWidth - fab.offsetWidth - 12 : x, y);
+      }
+      Object.values(this.charts).forEach(chart => {
+        this.colorChart(chart.config.options, dark);
+        chart.update('none');
+        chart.resize();
+      });
+      if (!settings.weeklyReminder) {
+        const toast = this.root.querySelector('.bwp-toast');
+        if (toast) toast.remove();
+      }
+    },
+
+    colorChart(options, dark) {
+      const text = dark ? '#c2c7d0' : '#61666d';
+      options.color = text;
+      options.plugins = options.plugins || {};
+      if (options.plugins.legend !== false) {
+        options.plugins.legend = options.plugins.legend || {};
+        options.plugins.legend.labels = options.plugins.legend.labels || {};
+        options.plugins.legend.labels.color = text;
+      }
+      if (options.plugins.tooltip !== false) {
+        options.plugins.tooltip = options.plugins.tooltip || {};
+        Object.assign(options.plugins.tooltip, {
+          backgroundColor: dark ? '#e7eaf0' : 'rgba(24,25,28,.92)',
+          titleColor: dark ? '#18191c' : '#ffffff', bodyColor: dark ? '#18191c' : '#ffffff',
+        });
+      }
+      Object.values(options.scales || {}).forEach(scale => {
+        if (!scale || typeof scale !== 'object') return;
+        scale.ticks = scale.ticks || {};
+        scale.ticks.color = text;
+        scale.grid = scale.grid || {};
+        scale.grid.color = dark ? 'rgba(241,242,245,.12)' : 'rgba(24,25,28,.06)';
+        if (scale.title) scale.title.color = text;
+      });
+    },
+
+    showSettings() {
+      const search = this.el.body.querySelector('.bwp-search input');
+      if (this.current === '全部' && search) this.allQuery = search.value;
+      this.view = 'settings';
+      this.el.tabs.hidden = true;
+      this.render();
+      this.root.querySelector('[data-setting-act="back"]').focus();
+    },
+
+    closeSettings() {
+      this.view = 'stats';
+      this.el.tabs.hidden = false;
+      this.render();
+      this.el.settings.focus();
+    },
+
+    resetFabPosition() {
+      try {
+        GM_deleteValue(CONFIG.KEYS.FAB_POS);
+        if (GM_getValue(CONFIG.KEYS.FAB_POS, null) !== null) throw new Error('位置删除未生效');
+        this.placeFab(window.innerWidth - this.el.fab.offsetWidth - 16, 72);
+        return true;
+      } catch (err) { logError('Panel.resetFabPosition', err); return false; }
+    },
+
+    renderSettings() {
+      const wrap = document.createElement('div');
+      wrap.className = 'bwp-settings';
+      // 固定模板，不插入任何原始记录或未验证的存储字段。
+      wrap.innerHTML = '<button type="button" class="bwp-btn ghost" data-setting-act="back">← 返回统计</button>'
+        + '<section><h3>外观</h3>'
+        + '<label class="bwp-setting"><span>主题</span><select name="theme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>'
+        + '<label class="bwp-setting"><span>面板宽度</span><output id="bwp-width-label"></output><input aria-label="面板宽度" name="panelWidth" type="range" min="320" max="520" step="20"></label>'
+        + '<label class="bwp-setting"><span>悬浮按钮尺寸</span><select name="fabSize"><option value="40">40 px</option><option value="48">48 px</option><option value="56">56 px</option></select></label>'
+        + '<button type="button" class="bwp-btn ghost" data-setting-act="position">重置按钮位置</button>'
+        + '<button type="button" class="bwp-btn ghost" data-setting-act="appearance">恢复默认外观（主题、宽度、尺寸、位置）</button></section>'
+        + '<section><h3>操作与提醒</h3>'
+        + '<label class="bwp-setting"><span>每周报告提醒</span><input name="weeklyReminder" type="checkbox"></label>'
+        + '<label class="bwp-setting"><span>面板快捷键</span><input name="shortcutEnabled" type="checkbox"></label>'
+        + '<p>开启后用 Alt+Shift+W 开关面板；输入时不触发。浏览器或系统占用时仍可点击悬浮按钮。</p></section>'
+        + '<section><h3>数据健康检查</h3><p>只读检查当前本地存储，不自动修复或合并记录。</p>'
+        + '<button type="button" class="bwp-btn" data-setting-act="health">开始检查</button><div class="bwp-health" role="status" aria-live="polite"></div>'
+        + '<p>JSON 导出使用已清洗的有效记录，可能排除损坏条目，不等于原始数据的完整无损备份。</p></section>'
+        + '<div class="bwp-setting-status" role="status" aria-live="polite"></div>';
+      this.el.body.appendChild(wrap);
+      const sync = () => {
+        const settings = Store.getUiSettings();
+        Object.entries(settings).forEach(([key, value]) => {
+          const input = wrap.querySelector('[name="' + key + '"]');
+          if (input.type === 'checkbox') input.checked = value;
+          else input.value = String(value);
+        });
+        wrap.querySelector('#bwp-width-label').textContent = settings.panelWidth + ' px';
+      };
+      const status = (ok, text) => {
+        wrap.querySelector('.bwp-setting-status').textContent = ok ? text : '保存失败，请检查脚本存储权限后重试。';
+      };
+      wrap.addEventListener('input', e => {
+        const input = e.target;
+        if (!input.name) return;
+        const value = input.type === 'checkbox' ? input.checked
+          : ['panelWidth', 'fabSize'].includes(input.name) ? Number(input.value) : input.value;
+        const ok = Store.setUiSettings({ [input.name]: value });
+        this.applyUiSettings(); sync(); status(ok, '设置已保存');
+      });
+      wrap.addEventListener('click', e => {
+        const btn = e.target.closest('[data-setting-act]');
+        if (!btn) return;
+        const action = btn.dataset.settingAct;
+        if (action === 'back') this.closeSettings();
+        else if (action === 'position') status(this.resetFabPosition(), '按钮位置已重置');
+        else if (action === 'appearance') {
+          const ok = Store.setUiSettings({ theme: 'system', panelWidth: 380, fabSize: 48 });
+          this.applyUiSettings(); sync();
+          status(ok && this.resetFabPosition(), '默认外观已恢复；提醒、快捷键与观看数据保持不变');
+        } else if (action === 'health') {
+          this.healthResult = Store.inspectHealth();
+          this.renderHealthResult();
+        }
+      });
+      sync(); this.renderHealthResult();
+    },
+
+    renderHealthResult() {
+      const box = this.root.querySelector('.bwp-health');
+      if (!box || !this.healthResult) return;
+      const result = this.healthResult;
+      box.textContent = '';
+      const summary = document.createElement('p');
+      const issueCount = result.findings.filter(f => f.code !== 'archive-trimmed').reduce((n, f) => n + f.count, 0);
+      summary.textContent = (result.status === 'incomplete' ? '检查未完成（计数仅供参考）' : '扫描完成')
+        + ' · ' + new Date(result.scannedAt).toLocaleString()
+        + ' · 主记录 ' + result.counts.records + ' 条 · 归档 ' + result.counts.archive + ' 条'
+        + ' · 问题计数 ' + issueCount + '（不同类别可能涉及同一条记录）';
+      box.appendChild(summary);
+      if (!result.findings.length) {
+        const clean = document.createElement('p'); clean.textContent = '未发现已定义的异常'; box.appendChild(clean); return;
+      }
+      const names = { 'storage-format': '存储格式错误（应为数组）', 'invalid-record': '无效记录',
+        'invalid-number': '非法数值字段', 'sessions-format': '会话字段不是数组', 'invalid-session': '无效会话',
+        'duplicate-record': '重复记录组', 'archive-trimmed': '部分最旧记录曾被裁剪，建议备份，无法由本工具恢复',
+        'read-error': '存储读取失败', 'scan-limit': '超出数量或时间预算，扫描不完整' };
+      const sources = { records: '主记录', archive: '归档', combined: '主记录与归档', archiveNotice: '容量提示' };
+      const list = document.createElement('ul');
+      result.findings.forEach(f => {
+        const item = document.createElement('li');
+        item.textContent = sources[f.source] + '：' + names[f.code] + ' · ' + f.count
+          + (f.involved ? ' 组，涉及 ' + f.involved + ' 条' : '');
+        list.appendChild(item);
+      });
+      box.appendChild(list);
     },
 
     /** 构建 Tab 按钮 */
@@ -1895,18 +2186,37 @@
       const self = this;
       this.el.fab.addEventListener('click', function () { self.toggle(); });
       this.el.close.addEventListener('click', function () { self.hide(); });
+      this.el.settings.addEventListener('click', function () { self.view === 'settings' ? self.closeSettings() : self.showSettings(); });
       this.el.footer.addEventListener('click', function (e) {
         const act = e.target && e.target.dataset ? e.target.dataset.act : '';
         if (act === 'export') self.exportJSON();
         if (act === 'import') self.importJSON();
         if (act === 'clear') self.clearAll();
       });
-      // ESC 关闭
-      document.addEventListener('keydown', function (e) {
-        if (e.key !== 'Escape' || !self.open) return;
-        if (self.detailDrawer) self.closeRecordDetail();
-        else self.hide();
-      });
+      // 全局监听只绑定一次；composedPath 识别 Shadow DOM 内的输入控件。
+      if (!this._keyboardBound) {
+        this._keyboardBound = true;
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && self.open) {
+            e.preventDefault();
+            if (self.detailDrawer) self.closeRecordDetail();
+            else if (self.view === 'settings') self.closeSettings();
+            else self.hide();
+            return;
+          }
+          if (e.repeat || e.isComposing || e.ctrlKey || e.metaKey || !e.altKey || !e.shiftKey
+            || String(e.key).toLowerCase() !== 'w' || !Store.getUiSettings().shortcutEnabled) return;
+          if (e.composedPath().some(node => node && node.nodeType === 1
+            && (node.matches('input, textarea, select') || node.isContentEditable))) return;
+          e.preventDefault(); self.toggle();
+        });
+        this._themeMedia = window.matchMedia('(prefers-color-scheme: dark)');
+        const onThemeChange = function () {
+          if (Store.getUiSettings().theme === 'system') self.applyUiSettings();
+        };
+        if (this._themeMedia.addEventListener) this._themeMedia.addEventListener('change', onThemeChange);
+        else if (this._themeMedia.addListener) this._themeMedia.addListener(onThemeChange);
+      }
       // 浮动按钮拖动（位置持久化，关闭按钮固定不动）
       this.bindFabDrag();
     },
@@ -1926,8 +2236,8 @@
       if (!this._fabResizeBound) {
         this._fabResizeBound = true;
         window.addEventListener('resize', debounce(function () {
-          const rect = fab.getBoundingClientRect();
-          const rightSide = rect.left + rect.width / 2 > window.innerWidth / 2;
+          const rect = self.el.fab.getBoundingClientRect();
+          const rightSide = self._fabSide === 'right';
           const x = rightSide ? window.innerWidth - rect.width - 12 : rect.left;
           self.placeFab(x, rect.top, true);
         }, 100));
@@ -1970,6 +2280,7 @@
       const maxY = Math.max(0, window.innerHeight - fab.offsetHeight - 4);
       const nx = Math.min(Math.max(0, x), maxX);
       const ny = Math.min(Math.max(0, y), maxY);
+      this._fabSide = nx + fab.offsetWidth / 2 > window.innerWidth / 2 ? 'right' : 'left';
       fab.style.left = nx + 'px';
       fab.style.top = ny + 'px';
       fab.style.right = 'auto';
@@ -1986,11 +2297,15 @@
       const self = this;
       safe(function () {
         if (!self.mounted || !self.host || !document.documentElement.contains(self.host)) self.mount();
-        if (tab) self.current = tab;
+        if (!self.open) self._returnFocus = self.root.activeElement || document.activeElement;
+        if (tab) { self.current = tab; self.view = 'stats'; }
+        self.el.tabs.hidden = self.view === 'settings';
         self.syncTabs();
+        self.el.panel.inert = false;
         self.el.panel.classList.add('open');
         self.open = true;
         self.render();
+        self.el.close.focus();
       }, 'Panel.show');
     },
 
@@ -2000,13 +2315,19 @@
       safe(function () {
         self.closeRecordDetail();
         self.el.panel.classList.remove('open');
+        self.el.panel.inert = true;
         self.open = false;
         self.destroyCharts();
+        const target = self._returnFocus;
+        if (target && target.isConnected && typeof target.focus === 'function') target.focus();
+        else self.el.fab.focus();
       }, 'Panel.hide');
     },
 
     /** 切换 Tab（关闭时清图表，打开时才渲染） */
     switchTab(name) {
+      this.view = 'stats';
+      this.el.tabs.hidden = false;
       this.current = name;
       this.syncTabs();
       this.destroyCharts();
@@ -2027,7 +2348,9 @@
       const self = this;
       safe(function () {
         self.closeRecordDetail();
+        self.destroyCharts();
         self.el.body.innerHTML = '';
+        if (self.view === 'settings') { self.renderSettings(); return; }
         if (self.current === '今日') self.renderToday();
         else if (self.current === '本周') self.renderWeek();
         else if (self.current === '全部') self.renderAll();
@@ -2052,6 +2375,7 @@
     showRecordDetail(record) {
       this.closeRecordDetail();
       if (!record || !this.el.panel) return;
+      this._detailReturnFocus = this.root.activeElement;
       const drawer = document.createElement('section');
       drawer.className = 'bwp-detail-drawer';
       const head = document.createElement('div');
@@ -2108,11 +2432,14 @@
       drawer.appendChild(body);
       this.el.panel.appendChild(drawer);
       this.detailDrawer = drawer;
+      back.focus();
     },
 
     closeRecordDetail() {
       if (this.detailDrawer && this.detailDrawer.parentNode) this.detailDrawer.parentNode.removeChild(this.detailDrawer);
       this.detailDrawer = null;
+      if (this._detailReturnFocus && this._detailReturnFocus.isConnected) this._detailReturnFocus.focus();
+      this._detailReturnFocus = null;
     },
 
     /** 今日 Tab：今日概览 → 观看质量 → 趋势 → 观看记录 */
@@ -2439,6 +2766,7 @@
       this.el.body.appendChild(this.subTitle('观看记录'));
       const search = this.searchBox(function (value) {
         self.allQuery = value;
+        if (self.view !== 'stats' || self.current !== '全部') return;
         self.destroyCharts();
         self.render();
         const input = self.el.body.querySelector('.bwp-search input');
@@ -2702,6 +3030,8 @@
           if (sc.ticks.maxRotation === undefined) sc.ticks.maxRotation = 0;
           if (sc.ticks.autoSkip === undefined) sc.ticks.autoSkip = true;
         });
+        this.colorChart(config.options, this.host.dataset.theme === 'dark');
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) config.options.animation = false;
         this.charts[key] = new Chart(canvas.getContext('2d'), config);
       } catch (err) {
         logError('Panel.makeChart.' + key, err);
@@ -2886,13 +3216,14 @@
   ].join('\n');
 
   const TOAST_CSS = [
-    '.bwp-toast { position: fixed; right: 20px; bottom: 26px; z-index: 2147483002; display: flex; align-items: center; gap: 10px; max-width: 270px; padding: 12px 14px; border-radius: 16px; border: 1px solid rgba(251,114,153,.2); background: rgba(255,255,255,.96); box-shadow: 0 10px 28px rgba(24,25,28,.12), 0 2px 8px rgba(97,102,109,.06); font-size: 12px; line-height: 1.55; color: #18191c; cursor: pointer; animation: bwp-toast-in .3s cubic-bezier(.32,.72,0,1); transition: transform .2s ease, box-shadow .2s ease; }',
+    '.bwp-toast { position: fixed; right: 20px; bottom: 26px; z-index: 2147483002; display: flex; align-items: center; gap: 10px; max-width: 270px; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--bwp-pink-border); background: var(--bwp-surface); box-shadow: 0 10px 28px rgba(24,25,28,.12), 0 2px 8px rgba(97,102,109,.06); font-size: 12px; line-height: 1.55; color: var(--bwp-text); cursor: pointer; animation: bwp-toast-in .3s cubic-bezier(.32,.72,0,1); transition: transform .2s ease, box-shadow .2s ease; }',
     '.bwp-toast:hover { transform: translateY(-2px); box-shadow: 0 14px 32px rgba(24,25,28,.16), 0 2px 8px rgba(97,102,109,.08); }',
     '.bwp-toast > span { min-width: 0; }',
-    '.bwp-toast b { color: #e8578a; }',
-    '.bwp-toast .x { order: 2; flex: none; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: #9499a0; }',
-    '.bwp-toast .x:hover { background: #f5f5f7; color: #61666d; }',
+    '.bwp-toast b { color: var(--bwp-pink-strong); }',
+    '.bwp-toast .x { order: 2; flex: none; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--bwp-text-3); }',
+    '.bwp-toast .x:hover { background: var(--bwp-surface-muted); color: var(--bwp-text-2); }',
     '@keyframes bwp-toast-in { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }',
+    '@media (prefers-reduced-motion: reduce) { .bwp-toast { animation:none; transition:none; } }',
   ].join('\n');
 
   /** 渲染报告卡片内容（返回报告根元素） */
@@ -3098,7 +3429,8 @@
       const wrap = document.createElement('div');
       wrap.style.cssText = 'position:fixed;left:-99999px;top:0;width:360px;background:#fff;';
       const style = document.createElement('style');
-      style.textContent = REPORT_CSS;
+      style.textContent = TOKENS_CSS.join('\n').replace(/:host/g, '.bwp-export') + '\n' + REPORT_CSS;
+      wrap.className = 'bwp-export';
       wrap.appendChild(style);
       const clone = node.cloneNode(true);
       // 截图前彻底关闭克隆体内的动画：html2canvas 会按计算样式复制子树，
@@ -3115,12 +3447,20 @@
       });
 
       // canvas 内容不会随 cloneNode 复制，改用快照图片
+      const thisChart = canvas => Object.values(self.charts).find(chart => chart.canvas === canvas);
       const srcCanvas = node.querySelectorAll('canvas');
       const dstCanvas = clone.querySelectorAll('canvas');
       for (let i = 0; i < srcCanvas.length && i < dstCanvas.length; i++) {
         try {
           const img = document.createElement('img');
-          img.src = srcCanvas[i].toDataURL('image/png');
+          // 只在同步截图期间重画浅色图表，然后恢复界面主题；不重建 UI。
+          const chart = thisChart(srcCanvas[i]);
+          try {
+            if (chart) { self.colorChart(chart.config.options, false); chart.stop(); chart.update('none'); }
+            img.src = srcCanvas[i].toDataURL('image/png');
+          } finally {
+            if (chart) { self.colorChart(chart.config.options, self.host.dataset.theme === 'dark'); chart.update('none'); }
+          }
           img.style.cssText = 'width:100%;height:auto;display:block;';
           dstCanvas[i].parentNode.replaceChild(img, dstCanvas[i]);
         } catch (err) { /* 单张画布快照失败不影响整体导出 */ }
@@ -3147,6 +3487,7 @@
   /** 周日首次打开时的轻提示（每周只提醒一次） */
   function maybeShowWeeklyReminder() {
     try {
+      if (!Store.getUiSettings().weeklyReminder) return;
       const now = new Date();
       if (now.getDay() !== 0) return;          // 仅周日
       const wk = weekKey(now);
@@ -3201,7 +3542,7 @@
     safe(function () {
       Store.initSchema();
       wrapHistory();
-      log('脚本已加载，版本 0.7.0', location.href);
+      log('脚本已加载，版本 0.8.0', location.href);
 
       // 阶段 3：仅视频页启用采集（SPA 路由切换由守护定时器处理）
       safe(function () { ensureCollector(); }, 'ensureCollector');

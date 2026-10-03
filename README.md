@@ -6,19 +6,28 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.7.1"><img src="https://img.shields.io/badge/version-0.7.1-fb7299" alt="version"></a>
+  <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.8.0"><img src="https://img.shields.io/badge/version-0.8.0-fb7299" alt="version"></a>
   <img src="https://img.shields.io/badge/Tampermonkey-compatible-4a90d9" alt="Tampermonkey compatible">
   <img src="https://img.shields.io/badge/storage-local--only-6c757d" alt="local only">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license">
 </p>
 
 <p align="center">
-  <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.7.1">下载 v0.7.1</a> ·
+  <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.8.0">下载 v0.8.0</a> ·
   <a href="./bilibili-watch-panel.user.js">查看用户脚本</a> ·
   <a href="./CHANGELOG.md">版本记录</a>
 </p>
 
 ---
+
+## v0.8 设置与体验
+
+> 当前版本为 **0.8.0**，按用户确认于 2026-10-03 发布。18 项逻辑测试、42 项隔离浏览器断言已通过；真实 B 站 + Tampermonkey、Edge 与浏览器实际缩放验收仍待补充，并不表示完整验收通过。安装/升级时，将当前用户脚本完整复制到 Tampermonkey 编辑器并保存，刷新 B 站后从面板右上角齿轮进入设置。建议升级前先导出 JSON；设置不包含在 JSON 备份中。详见 [测试结果](./docs/v0.8-测试结果.md)。
+
+- 支持跟随系统、浅色、深色主题，面板宽度（320–520 px）与悬浮按钮尺寸（40/48/56 px）。
+- 可重置悬浮按钮位置或恢复默认外观，不影响观看记录、周目标与提醒状态。
+- 可关闭每周报告提醒，或启用 `Alt+Shift+W` 面板快捷键；`Esc` 按详情 → 设置 → 面板逐层退出。
+- 提供只读数据健康检查：识别格式错误、无效记录、重复记录、非法数值、会话异常与历史裁剪提示，不自动修复。
 
 ## 这是什么？
 
@@ -142,7 +151,7 @@ B站页面公开信息
 4. 安装完成后打开任意 B 站页面，点击右侧粉色浮动按钮。
 5. 在视频页播放视频后，面板会开始记录观看数据。
 
-也可以直接从 [v0.7.1 Release](https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.7.1) 下载脚本。
+也可以直接从 [v0.7.1 Release](./bilibili-watch-panel.user.js) 下载脚本。
 
 ## 隐私与合规
 
