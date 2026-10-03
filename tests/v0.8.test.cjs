@@ -107,6 +107,6 @@ test('旧记录清洗与会话重复导入兼容', () => {
 test('用户脚本不增加权限或外部依赖', () => {
   const cp=require('node:child_process'); const base=cp.execFileSync('git',['show','HEAD:bilibili-watch-panel.user.js'],{encoding:'utf8',cwd:path.join(__dirname,'..')});
   const meta=s=>s.split(/\r?\n/).filter(l=>/^\/\/ @(grant|require|match)\s/.test(l)); assert.deepEqual(meta(source),meta(base));
-  assert.match(source,/@version\s+0\.8\.0/);
+  assert.match(source,/@version\s+0\.8\.1/);
 });
 console.log(`\n${checks} tests passed`);

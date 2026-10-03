@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili Watch Panel
 // @namespace    https://github.com/Gavin-gwj/bilibili-watch-panel
-// @version      0.8.0
+// @version      0.8.1
 // @description  本地B站观看数据统计与可视化面板
 // @author       Gavin-gwj
 // @match        https://*.bilibili.com/*
@@ -1876,6 +1876,20 @@
     '.bwp-detail-grid .v { display: block; margin-top: 4px; color: var(--bwp-text); font-size: 12px; overflow-wrap: anywhere; }',
     '.bwp-filter { display: flex; gap: 6px; margin-bottom: 10px; }',
     '.bwp-filter select { flex: 1; min-width: 0; padding: 8px 9px; border: 1px solid var(--bwp-border-strong); border-radius: var(--bwp-radius-sm); background: var(--bwp-surface); color: var(--bwp-text-2); font-size: 11.5px; }',
+    /* ---------- 本周：时间范围分段控件 ---------- */
+    '.bwp-week-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin: 2px 0 14px; padding: 4px; border: 1px solid var(--bwp-border); border-radius: var(--bwp-radius-md); background: var(--bwp-surface-muted); }',
+    '.bwp-week-range button { min-width: 0; padding: 9px 10px; border: 0; border-radius: 9px; background: transparent; color: var(--bwp-text-2); font-size: 12px; font-weight: 500; cursor: pointer; transition: color .18s ease, background .18s ease, box-shadow .18s ease; }',
+    '.bwp-week-range button:hover { color: var(--bwp-pink-strong); }',
+    '.bwp-week-range button.active { background: var(--bwp-surface); color: var(--bwp-pink-strong); font-weight: 600; box-shadow: var(--bwp-shadow-sm); }',
+    /* ---------- 本周：目标设置输入组 ---------- */
+    '.bwp-goal-form { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; padding: 8px; border: 1px solid var(--bwp-border); border-radius: var(--bwp-radius-md); background: var(--bwp-surface); box-shadow: var(--bwp-shadow-sm); }',
+    '.bwp-goal-input { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; border: 1px solid var(--bwp-border-strong); border-radius: 9px; background: var(--bwp-surface-muted); transition: border-color .18s ease, box-shadow .18s ease, background .18s ease; }',
+    '.bwp-goal-input:focus-within { border-color: var(--bwp-pink); background: var(--bwp-surface); box-shadow: 0 0 0 3px rgba(251,114,153,.12); }',
+    '.bwp-goal-input input { width: 100%; min-width: 0; padding: 0; border: 0; outline: 0; background: transparent; color: var(--bwp-text); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }',
+    '.bwp-goal-input .unit { flex: none; color: var(--bwp-text-3); font-size: 11.5px; white-space: nowrap; }',
+    '.bwp-goal-form .bwp-goal-save { flex: none; min-height: 36px; padding: 0 14px; border: 0; border-radius: 9px; background: var(--bwp-pink); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; box-shadow: var(--bwp-shadow-sm); transition: transform .18s ease, background .18s ease, box-shadow .18s ease; }',
+    '.bwp-goal-form .bwp-goal-save:hover { transform: translateY(-1px); background: var(--bwp-pink-strong); box-shadow: var(--bwp-shadow-pink); }',
+    '.bwp-goal-form .bwp-goal-save:active { transform: translateY(0) scale(.99); }',
     /* ---------- 年度热力图 ---------- */
     '.bwp-heat { display: flex; gap: 2px; align-items: flex-start; margin: 2px 0 6px; }',
     '.bwp-heat-col { display: flex; flex: 1; flex-direction: column; gap: 2px; }',
@@ -2668,11 +2682,16 @@
         : '完播率 ' + (wow.completionDelta === null ? '暂无可比较数据' : (wow.completionDelta >= 0 ? '提升 ' : '下降 ') + Math.abs(Math.round(wow.completionDelta)) + ' 个百分点') + ' · 平均进度 ' + (wow.progressDelta === null ? '暂无可比较数据' : (wow.progressDelta >= 0 ? '提升 ' : '下降 ') + Math.abs(Math.round(wow.progressDelta)) + ' 个百分点');
       this.el.body.appendChild(comparison);
       const range = document.createElement('div');
-      range.className = 'bwp-filter';
+      range.className = 'bwp-week-range';
+      range.setAttribute('role', 'group');
+      range.setAttribute('aria-label', '统计时间范围');
       [7, 30].forEach(function (days) {
         const button = document.createElement('button');
+        const active = days === (this.weekRangeDays || 7);
+        button.type = 'button';
         button.textContent = days === 7 ? '近 7 天' : '近 30 天';
-        button.className = days === (this.weekRangeDays || 7) ? 'active' : '';
+        button.className = active ? 'active' : '';
+        button.setAttribute('aria-pressed', String(active));
         button.addEventListener('click', function () { this.weekRangeDays = days; this.destroyCharts(); this.render(); }.bind(this));
         range.appendChild(button);
       }, this);
@@ -2688,12 +2707,20 @@
       goalWrap.textContent = '每周目标：' + formatDuration(goal) + ' · 已完成 ' + formatPercent(Math.min(1, goalData.totalSeconds / goal));
       this.el.body.appendChild(goalWrap);
       const goalForm = document.createElement('div');
-      goalForm.className = 'bwp-filter';
+      goalForm.className = 'bwp-goal-form';
+      goalForm.setAttribute('role', 'group');
+      goalForm.setAttribute('aria-label', '设置每周目标');
       const goalInput = document.createElement('input');
-      goalInput.type = 'number'; goalInput.min = '1'; goalInput.step = '5'; goalInput.value = Math.round(goal / 60); goalInput.title = '每周目标分钟数';
-      const goalButton = document.createElement('button'); goalButton.textContent = '保存目标';
+      goalInput.type = 'number'; goalInput.min = '1'; goalInput.step = '5'; goalInput.value = Math.round(goal / 60);
+      goalInput.title = '每周目标分钟数'; goalInput.setAttribute('aria-label', '每周目标分钟数');
+      const goalButton = document.createElement('button'); goalButton.type = 'button'; goalButton.className = 'bwp-goal-save'; goalButton.textContent = '保存目标';
       goalButton.addEventListener('click', function () { const minutes = Number(goalInput.value); if (!Number.isFinite(minutes) || minutes <= 0) return; GM_setValue(CONFIG.KEYS.WEEKLY_GOAL, Math.round(minutes * 60)); this.render(); }.bind(this));
-      goalForm.appendChild(goalInput); goalForm.appendChild(document.createTextNode(' 分钟/周 ')); goalForm.appendChild(goalButton);
+      const goalField = document.createElement('label');
+      goalField.className = 'bwp-goal-input';
+      const goalUnit = document.createElement('span');
+      goalUnit.className = 'unit'; goalUnit.textContent = '分钟/周';
+      goalField.appendChild(goalInput); goalField.appendChild(goalUnit);
+      goalForm.appendChild(goalField); goalForm.appendChild(goalButton);
       this.el.body.appendChild(goalForm);
       this.el.body.appendChild(this.subTitle((data.days === 30 ? '近 30 天' : '近 7 天') + '每日时长 · ' + data.weekKey));
       this.el.body.appendChild(this.chartBox('weekDaily'));
@@ -3542,7 +3569,7 @@
     safe(function () {
       Store.initSchema();
       wrapHistory();
-      log('脚本已加载，版本 0.8.0', location.href);
+      log('脚本已加载，版本 0.8.1', location.href);
 
       // 阶段 3：仅视频页启用采集（SPA 路由切换由守护定时器处理）
       safe(function () { ensureCollector(); }, 'ensureCollector');

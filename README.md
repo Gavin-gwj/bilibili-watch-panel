@@ -6,23 +6,27 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.8.0"><img src="https://img.shields.io/badge/version-0.8.0-fb7299" alt="version"></a>
+  <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.8.1"><img src="https://img.shields.io/badge/version-0.8.1-fb7299" alt="version"></a>
   <img src="https://img.shields.io/badge/Tampermonkey-compatible-4a90d9" alt="Tampermonkey compatible">
   <img src="https://img.shields.io/badge/storage-local--only-6c757d" alt="local only">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license">
 </p>
 
 <p align="center">
-  <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.8.0">下载 v0.8.0</a> ·
+  <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.8.1">下载 v0.8.1</a> ·
   <a href="./bilibili-watch-panel.user.js">查看用户脚本</a> ·
   <a href="./CHANGELOG.md">版本记录</a>
 </p>
 
 ---
 
-## v0.8 设置与体验
+## v0.8.1 本周页控件视觉升级
 
-> 当前版本为 **0.8.0**，按用户确认于 2026-10-03 发布。18 项逻辑测试、42 项隔离浏览器断言已通过；真实 B 站 + Tampermonkey、Edge 与浏览器实际缩放验收仍待补充，并不表示完整验收通过。安装/升级时，将当前用户脚本完整复制到 Tampermonkey 编辑器并保存，刷新 B 站后从面板右上角齿轮进入设置。建议升级前先导出 JSON；设置不包含在 JSON 备份中。详见 [测试结果](./docs/v0.8-测试结果.md)。
+> 当前版本为 **0.8.1**，于 2026-10-03 发布。18 项逻辑测试、42 项隔离浏览器断言已通过；升级前建议先导出 JSON。
+
+- 本周页「近 7 天 / 近 30 天」改为分段切换控件，选中态更清晰。
+- 本周页「每周目标」改为输入组与主操作按钮，提升层次、可读性与操作明确度。
+- 保留原有功能、交互逻辑和本地数据结构，未新增依赖。
 
 - 支持跟随系统、浅色、深色主题，面板宽度（320–520 px）与悬浮按钮尺寸（40/48/56 px）。
 - 可重置悬浮按钮位置或恢复默认外观，不影响观看记录、周目标与提醒状态。
@@ -176,6 +180,8 @@ B站页面公开信息
 
 ## 版本
 
+- **v0.8.1**：优化本周页时间范围与每周目标控件，补充分组与输入语义。
+- **v0.8.0**：新增设置视图、主题、健康检查与快捷键等体验增强。
 - **v0.7.1**：修复浏览器缩放后浮动按钮可能超出视口的问题，并在窗口尺寸变化时自动重新定位。
 - **v0.7.0**：加入播放会话、会话中断率和详情抽屉。
 - 完整历史见 [`CHANGELOG.md`](./CHANGELOG.md)。
