@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili Watch Panel
 // @namespace    https://github.com/Gavin-gwj/bilibili-watch-panel
-// @version      0.7.0
+// @version      0.7.1
 // @description  本地B站观看数据统计与可视化面板
 // @author       Gavin-gwj
 // @match        https://*.bilibili.com/*
@@ -1849,11 +1849,11 @@
         extra.textContent = (typeof REPORT_CSS === 'string' ? REPORT_CSS : '') + '\n' + (typeof TOAST_CSS === 'string' ? TOAST_CSS : '');
         root.appendChild(extra);
 
-        this.el.fab.style.left = (window.innerWidth - 64) + 'px';
-        this.el.fab.style.top = '72px';
+        // 先挂载再测量，避免浏览器缩放后使用错误的按钮尺寸计算位置。
+        document.body.appendChild(host);
+        this.placeFab(window.innerWidth - this.el.fab.offsetWidth - 16, 72);
         this.buildTabs();
         this.bind();
-        document.body.appendChild(host);
         this.mounted = true;
         log('面板已挂载');
       } catch (err) {
@@ -1921,6 +1921,17 @@
         const saved = GM_getValue(CONFIG.KEYS.FAB_POS, null);
         if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) self.placeFab(saved.x, saved.y);
       } catch (err) { /* 位置读取失败用默认值 */ }
+
+      // 浏览器缩放会触发 resize，重新按当前视口吸附，避免按钮被留在视口外。
+      if (!this._fabResizeBound) {
+        this._fabResizeBound = true;
+        window.addEventListener('resize', debounce(function () {
+          const rect = fab.getBoundingClientRect();
+          const rightSide = rect.left + rect.width / 2 > window.innerWidth / 2;
+          const x = rightSide ? window.innerWidth - rect.width - 12 : rect.left;
+          self.placeFab(x, rect.top, true);
+        }, 100));
+      }
 
       fab.addEventListener('pointerdown', function (e) {
         dragging = true; moved = false;

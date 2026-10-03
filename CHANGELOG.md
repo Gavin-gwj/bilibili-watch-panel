@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1] - 2026-10-03
+
+### Fixed
+
+- 修复浏览器缩放到 90% / 80% 后，浮动面板按钮可能因定位超出视口而不可见的问题。
+- 浏览器缩放或窗口尺寸变化后，自动按当前视口重新计算并吸附浮动按钮位置。
+
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/v1.0.0/)。
 
 ## [0.7.0] - 2026-10-03
