@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili Watch Panel
 // @namespace    https://github.com/Gavin-gwj/bilibili-watch-panel
-// @version      0.5.0
+// @version      0.6.0
 // @description  本地B站观看数据统计与可视化面板
 // @author       Gavin-gwj
 // @match        https://*.bilibili.com/*
@@ -74,11 +74,13 @@
       REMINDER: 'lastReminderWeek',
       ARCHIVE_NOTICE: 'archiveNotice',
       FAB_POS: 'fabPos',
+      WEEKLY_GOAL: 'weeklyGoalSeconds',
     },
     /** 当前数据结构版本 */
     SCHEMA_VERSION: 2,
     COMPLETION_TOLERANCE_SECONDS: 2,
     COMPLETION_PROGRESS_THRESHOLD: 0.95,
+    DEFAULT_WEEKLY_GOAL_SECONDS: 3600,
     /** 主题色 */
     THEME: {
       pink: '#fb7299',
@@ -1198,27 +1200,41 @@
       };
     },
 
-    /** 近 7 天趋势 + 本周（周一起）Top5 UP 主 */
-    week() {
+    /** 统计近 N 天（含今天），供本周与近 30 天共用 */
+    period(days) {
       const records = Store.getRecords();
-      const dates = recentDates(7);
+      const dates = recentDates(days);
+      const dateSet = Object.create(null);
+      dates.forEach(function (d) { dateSet[d] = 1; });
+      const list = records.filter(function (r) { return !!dateSet[r.date]; });
       const daily = dates.map(function (d) {
-        const list = records.filter(function (r) { return r.date === d; });
-        return { date: d, label: d.slice(5), seconds: sumSeconds(list) };
+        const dayRecords = list.filter(function (r) { return r.date === d; });
+        return { date: d, label: d.slice(5), seconds: sumSeconds(dayRecords), quality: Stats.quality(dayRecords) };
       });
-      const weekRecords = records.filter(function (r) { return isSameIsoWeek(r.date, new Date()); });
-      const quality = this.quality(weekRecords);
       return {
+        days: days,
         daily: daily,
-        totalSeconds: daily.reduce(function (a, d) { return a + d.seconds; }, 0),
-        topUploaders: groupByUploader(weekRecords).slice(0, 5),
+        records: list,
+        totalSeconds: sumSeconds(list),
+        totalVideos: list.length,
+        topUploaders: groupByUploader(list).slice(0, 5),
+        quality: this.quality(list, { dedupeByBvid: days > 7 }),
         weekKey: weekKey(new Date()),
-        quality: quality,
       };
     },
 
+    /** 近 7 天趋势 + 本周（周一起）Top5 UP 主 */
+    week() { return this.period(7); },
+
+    /** 读取并规范化每周观看目标 */
+    weeklyGoal() {
+      let value = 0;
+      try { value = Number(GM_getValue(CONFIG.KEYS.WEEKLY_GOAL, CONFIG.DEFAULT_WEEKLY_GOAL_SECONDS)); } catch (err) { value = CONFIG.DEFAULT_WEEKLY_GOAL_SECONDS; }
+      return Number.isFinite(value) && value > 0 ? Math.round(value) : CONFIG.DEFAULT_WEEKLY_GOAL_SECONDS;
+    },
+
     /** 全部汇总；query 非空时按标题 / UP 主过滤（大小写不敏感） */
-    all(query, qualityFilter) {
+    all(query, qualityFilter, sortKey) {
       const list = this.allRecords();
       const uploaders = Object.create(null);
       list.forEach(function (r) { uploaders[r.uploader || '未知UP主'] = 1; });
@@ -1236,14 +1252,19 @@
           return progress === null;
         });
       }
-      const recent = matched.slice()
-        .sort(function (a, b) { return (b.lastActive || 0) - (a.lastActive || 0); });
+      const key = sortKey === 'duration' || sortKey === 'progress' ? sortKey : 'recent';
+      const recent = matched.slice().sort(function (a, b) {
+        if (key === 'duration') return (Number(b.watchedSeconds) || 0) - (Number(a.watchedSeconds) || 0);
+        if (key === 'progress') return (Stats.recordProgress(b) || -1) - (Stats.recordProgress(a) || -1);
+        return (b.lastActive || 0) - (a.lastActive || 0);
+      });
       return {
         seconds: sumSeconds(list),
         count: list.length,
         uploaderCount: Object.keys(uploaders).length,
         matchedCount: matched.length,
         query: q,
+        sortKey: key,
         recent: recent.slice(0, 100),
         quality: this.quality(list, { dedupeByBvid: true }),
       };
@@ -1262,17 +1283,46 @@
       return n;
     },
 
-    /** 本周 vs 上周总时长环比 */
+    /** 本周与上周的观看时长、视频数、完播率和平均进度对比 */
     weekOverWeek() {
       const records = Store.getRecords();
       const now = new Date();
       const prevDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
-      const thisWeek = sumSeconds(records.filter(function (r) { return isSameIsoWeek(r.date, now); }));
-      const lastWeek = sumSeconds(records.filter(function (r) { return isSameIsoWeek(r.date, prevDate); }));
-      let delta = 0;
-      if (lastWeek > 0) delta = (thisWeek - lastWeek) / lastWeek * 100;
-      else if (thisWeek > 0) delta = 100;
-      return { thisWeek: thisWeek, lastWeek: lastWeek, delta: delta, hasLast: lastWeek > 0 };
+      const current = records.filter(function (r) { return isSameIsoWeek(r.date, now); });
+      const previous = records.filter(function (r) { return isSameIsoWeek(r.date, prevDate); });
+      const a = this.quality(current);
+      const b = this.quality(previous);
+      function delta(currentValue, previousValue) {
+        if (previousValue === null || previousValue === undefined || previousValue === 0) return currentValue > 0 ? 100 : 0;
+        return (currentValue - previousValue) / previousValue * 100;
+      }
+      return {
+        thisWeek: sumSeconds(current), lastWeek: sumSeconds(previous),
+        thisVideos: current.length, lastVideos: previous.length,
+        thisCompletionRate: a.completionRate, lastCompletionRate: b.completionRate,
+        thisAverageProgress: a.averageProgress, lastAverageProgress: b.averageProgress,
+        delta: delta(sumSeconds(current), sumSeconds(previous)),
+        videoDelta: delta(current.length, previous.length),
+        completionDelta: a.completionRate === null || b.completionRate === null ? null : (a.completionRate - b.completionRate) * 100,
+        progressDelta: a.averageProgress === null || b.averageProgress === null ? null : (a.averageProgress - b.averageProgress) * 100,
+        hasLast: previous.length > 0,
+      };
+    },
+
+    /** 根据真实数据生成简短的本周洞察，空数据不伪造结�� */
+    insights() {
+      const current = this.period(7);
+      const wow = this.weekOverWeek();
+      if (!current.records.length) return [];
+      const out = [];
+      out.push('本周观看 ' + current.records.length + ' 个视频' + (wow.hasLast ? '，比上周' + (wow.videoDelta >= 0 ? '多' : '少') + Math.abs(Math.round(wow.videoDelta)) + '%' : '') + '。');
+      if (current.quality.averageProgress !== null) out.push('平均进度 ' + formatPercent(current.quality.averageProgress) + (wow.progressDelta === null ? '' : '，较上周' + (wow.progressDelta >= 0 ? '提升' : '下降') + Math.abs(Math.round(wow.progressDelta)) + '%') + '。');
+      const peak = current.records.reduce(function (acc, r) { const h = new Date(r.lastActive || r.timestamp || Date.now()).getHours(); acc[h] = (acc[h] || 0) + (Number(r.watchedSeconds) || 0); return acc; }, {});
+      const peakHour = Object.keys(peak).sort(function (a, b) { return peak[b] - peak[a]; })[0];
+      if (peakHour !== undefined) out.push('主要观看时段为 ' + String(peakHour).padStart(2, '0') + ':00 - ' + String((Number(peakHour) + 2) % 24).padStart(2, '0') + ':00。');
+      const repeat = current.records.slice().sort(function (a, b) { return (Number(b.playCount) || 1) - (Number(a.playCount) || 1); })[0];
+      if (repeat && Number(repeat.playCount) > 1) out.push('重复观看最多的是《' + (repeat.videoTitle || repeat.bvid) + '》。');
+      return out;
     },
 
     /** 近一年每日观看热力图（周一为列首，共 53 周 × 7 天） */
@@ -1599,6 +1649,8 @@
     current: '今日',
     allQuery: '',
     qualityFilter: 'all',
+    allSort: 'recent',
+    weekRangeDays: 7,
     open: false,
     mounted: false,
 
@@ -2006,19 +2058,54 @@
     },
     /** 本周 Tab */
     renderWeek() {
-      const data = Stats.week();
+      const data = Stats.period(this.weekRangeDays || 7);
       const wow = Stats.weekOverWeek();
       const streak = Stats.streak();
       const deltaText = wow.hasLast
         ? (wow.delta >= 0 ? '▲+' : '▼') + Math.abs(Math.round(wow.delta)) + '%'
         : '—';
       this.el.body.appendChild(this.cards([
-        { num: formatDuration(data.totalSeconds), lbl: '近7天总时长' },
+        { num: formatDuration(data.totalSeconds), lbl: data.days === 30 ? '近30天总时长' : '近7天总时长' },
         { num: streak > 0 ? streak + '天' : '0天', lbl: '连续观看' },
-        { num: deltaText, lbl: '环比上周' },
+        { num: deltaText, lbl: '时长环比' },
+        { num: wow.hasLast ? (wow.videoDelta >= 0 ? '▲+' : '▼') + Math.abs(Math.round(wow.videoDelta)) + '%' : '—', lbl: '视频数环比' },
       ]));
       this.el.body.appendChild(this.qualityBlock(data.quality, true));
-      this.el.body.appendChild(this.subTitle('近 7 天每日时长 · ' + data.weekKey));
+      const comparison = document.createElement('div');
+      comparison.className = 'bwp-rec-hint';
+      comparison.textContent = !wow.hasLast
+        ? '上周暂无可比较的观看数据'
+        : '完播率 ' + (wow.completionDelta === null ? '暂无可比较数据' : (wow.completionDelta >= 0 ? '提升 ' : '下降 ') + Math.abs(Math.round(wow.completionDelta)) + ' 个百分点') + ' · 平均进度 ' + (wow.progressDelta === null ? '暂无可比较数据' : (wow.progressDelta >= 0 ? '提升 ' : '下降 ') + Math.abs(Math.round(wow.progressDelta)) + ' 个百分点');
+      this.el.body.appendChild(comparison);
+      const range = document.createElement('div');
+      range.className = 'bwp-filter';
+      [7, 30].forEach(function (days) {
+        const button = document.createElement('button');
+        button.textContent = days === 7 ? '近 7 天' : '近 30 天';
+        button.className = days === (this.weekRangeDays || 7) ? 'active' : '';
+        button.addEventListener('click', function () { this.weekRangeDays = days; this.destroyCharts(); this.render(); }.bind(this));
+        range.appendChild(button);
+      }, this);
+      this.el.body.appendChild(range);
+      const insights = Stats.insights();
+      this.el.body.appendChild(this.subTitle('本周洞察'));
+      if (insights.length) insights.forEach(function (text) { const node = document.createElement('div'); node.className = 'bwp-rec-hint'; node.textContent = text; this.el.body.appendChild(node); }, this);
+      else this.el.body.appendChild(this.emptyNode('本周暂无足够数据生成洞察'));
+      const goal = Stats.weeklyGoal();
+      const goalData = Stats.period(7);
+      const goalWrap = document.createElement('div');
+      goalWrap.className = 'bwp-rec-hint';
+      goalWrap.textContent = '每周目标：' + formatDuration(goal) + ' · 已完成 ' + formatPercent(Math.min(1, goalData.totalSeconds / goal));
+      this.el.body.appendChild(goalWrap);
+      const goalForm = document.createElement('div');
+      goalForm.className = 'bwp-filter';
+      const goalInput = document.createElement('input');
+      goalInput.type = 'number'; goalInput.min = '1'; goalInput.step = '5'; goalInput.value = Math.round(goal / 60); goalInput.title = '每周目标分钟数';
+      const goalButton = document.createElement('button'); goalButton.textContent = '保存目标';
+      goalButton.addEventListener('click', function () { const minutes = Number(goalInput.value); if (!Number.isFinite(minutes) || minutes <= 0) return; GM_setValue(CONFIG.KEYS.WEEKLY_GOAL, Math.round(minutes * 60)); this.render(); }.bind(this));
+      goalForm.appendChild(goalInput); goalForm.appendChild(document.createTextNode(' 分钟/周 ')); goalForm.appendChild(goalButton);
+      this.el.body.appendChild(goalForm);
+      this.el.body.appendChild(this.subTitle((data.days === 30 ? '近 30 天' : '近 7 天') + '每日时长 · ' + data.weekKey));
       this.el.body.appendChild(this.chartBox('weekDaily'));
       this.makeChart('weekDaily', {
         type: 'line',
@@ -2072,7 +2159,7 @@
     /** 全部 Tab：归档提示 + 年度热力图 + 记录搜索 */
     renderAll() {
       const self = this;
-      const data = Stats.all(this.allQuery, this.qualityFilter);
+      const data = Stats.all(this.allQuery, this.qualityFilter, this.allSort);
       if (data.count === 0) { this.empty('还没有任何观看记录'); return; }
       this.el.body.appendChild(this.cards([
         { num: formatDuration(data.seconds), lbl: '累计总时长' },
@@ -2103,6 +2190,10 @@
       });
       select.addEventListener('change', function () { self.qualityFilter = select.value; self.render(); });
       filter.appendChild(select);
+      const sort = document.createElement('select');
+      [['recent', '最近观看'], ['duration', '观看时长'], ['progress', '观看进度']].forEach(function (item) { const option = document.createElement('option'); option.value = item[0]; option.textContent = item[1]; option.selected = self.allSort === item[0]; sort.appendChild(option); });
+      sort.addEventListener('change', function () { self.allSort = sort.value; self.render(); });
+      filter.appendChild(sort);
       this.el.body.appendChild(filter);
 
       const hint = document.createElement('div');
@@ -2355,6 +2446,7 @@
           schemaVersion: CONFIG.SCHEMA_VERSION,
           watchRecords: Store.getRecords(),
           watchRecordsArchive: Store.getArchive(),
+          weeklyGoalSeconds: Stats.weeklyGoal(),
         };
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
         this.downloadBlob(blob, 'bwp-backup-' + todayStr() + '.json');
@@ -2407,6 +2499,8 @@
           return;
         }
         if (!window.confirm('即将导入 ' + valid.length + ' 条记录，与现有数据合并（同一天同一视频保留时长较大者）。确认继续？')) return;
+        const importedGoal = Number(payload.weeklyGoalSeconds);
+        if (Number.isFinite(importedGoal) && importedGoal > 0) GM_setValue(CONFIG.KEYS.WEEKLY_GOAL, Math.round(importedGoal));
 
         const merged = Store.getRecords();
         const index = Object.create(null);
@@ -2854,4 +2948,3 @@
     bootstrap();
   }
 })();
-
