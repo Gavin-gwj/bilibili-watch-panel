@@ -2,7 +2,7 @@ https://github.com/Gavin-gwj/bilibili-watch-panel
 
 # Bilibili Watch Panel · B站个人观看数据面板
 
-![version](https://img.shields.io/badge/version-0.3.1-fb7299)
+![version](https://img.shields.io/badge/version-0.4.0-fb7299)
 ![Tampermonkey](https://img.shields.io/badge/Tampermonkey-compatible-4a90d9)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
@@ -64,10 +64,12 @@ https://github.com/Gavin-gwj/bilibili-watch-panel
 
 | Tab | 内容 |
 | --- | --- |
-| 今日 | 今日总时长、视频数、较昨日变化、视频活跃时段、24 小时最近活跃时间线、UP 主排行、今日观看记录、本周节奏 |
-| 本周 | 近 7 天每日时长折线图、本周 Top5 UP 主柱状图、连续观看天数、环比上周 |
-| 全部 | 累计总时长 / 总视频数 / 覆盖 UP 主数、近一年热力图、记录搜索、最多 100 条观看记录 |
-| 报告 | 卡片式本周使用报告（含连续天数 / 环比），可导出 PNG 图片 |
+| 今日 | 今日总时长、视频数、观看质量（完播率 / 平均进度 / 重复观看 / 平均单视频时长）、活跃时段、记录进度 |
+| 本周 | 近 7 天时长、每日完播率和平均进度图表、Top5 UP 主、连续观看天数、环比上周 |
+| 全部 | 累计质量摘要、进度 / 重看次数、已完播 / 未完播 / 进度未知筛选、近一年热力图 |
+| 报告 | 卡片式本周使用报告，增加完播率、平均进度和重复观看摘要，可导出 PNG 图片 |
+
+观看质量数据全部来自视频元素本地事件：视频总时长、最高播放位置、有效播放会话次数和完播判定。旧记录会自动补齐字段，但不会根据累计观看秒数伪造完播结果。
 
 ### 2. 本周使用报告
 

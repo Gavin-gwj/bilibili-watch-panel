@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili Watch Panel
 // @namespace    https://github.com/Gavin-gwj/bilibili-watch-panel
-// @version      0.3.1
+// @version      0.4.0
 // @description  本地B站观看数据统计与可视化面板
 // @author       Gavin-gwj
 // @match        https://*.bilibili.com/*
@@ -76,7 +76,9 @@
       FAB_POS: 'fabPos',
     },
     /** 当前数据结构版本 */
-    SCHEMA_VERSION: 1,
+    SCHEMA_VERSION: 2,
+    COMPLETION_TOLERANCE_SECONDS: 2,
+    COMPLETION_PROGRESS_THRESHOLD: 0.95,
     /** 主题色 */
     THEME: {
       pink: '#fb7299',
@@ -175,6 +177,10 @@
     if (h > 0) return h + '小时' + m + '分';
     if (m > 0) return m + '分' + (s % 60) + '秒';
     return s + '秒';
+  }
+
+  function formatPercent(value) {
+    return value === null || value === undefined || !Number.isFinite(Number(value)) ? '—' : Math.round(Number(value) * 100) + '%';
   }
 
   /** 时间戳格式化为 HH:MM（本地时区） */
@@ -276,6 +282,14 @@
       watchedSeconds: r.watchedSeconds,
       lastActive: r.lastActive,
       openCount: Number.isFinite(r.openCount) && r.openCount > 0 ? r.openCount : 1,
+      durationSeconds: Number.isFinite(r.durationSeconds) && r.durationSeconds > 0 ? r.durationSeconds : 0,
+      maxPositionSeconds: Number.isFinite(r.maxPositionSeconds) && r.maxPositionSeconds >= 0
+        ? r.maxPositionSeconds
+        : Math.min(Number(r.watchedSeconds) || 0, Number(r.durationSeconds) || 0),
+      playCount: Number.isFinite(r.playCount) && r.playCount > 0
+        ? Math.floor(r.playCount) : Math.max(1, Number(r.openCount) || 1),
+      completed: r.completed === true,
+      completedAt: Number.isFinite(r.completedAt) ? r.completedAt : 0,
     };
   }
 
@@ -364,6 +378,7 @@
       try {
         const v = GM_getValue(CONFIG.KEYS.SCHEMA, 0);
         if (v !== CONFIG.SCHEMA_VERSION) {
+          // 旧记录通过读取时 sanitizeRecord 补齐字段，避免重写用户数据。
           GM_setValue(CONFIG.KEYS.SCHEMA, CONFIG.SCHEMA_VERSION);
         }
       } catch (err) {
@@ -507,7 +522,7 @@
     const urlBvid = parseBvid(location.href);
     const urlAid = parseAid(location.href);
 
-    let info = { videoId: urlAid, bvid: urlBvid, videoTitle: '', uploader: '', uploaderId: '' };
+    let info = { videoId: urlAid, bvid: urlBvid, videoTitle: '', uploader: '', uploaderId: '', durationSeconds: 0 };
 
     const init = readInitialState();
     if (init) {
@@ -569,6 +584,9 @@
     videoInfo: null,
     /** 当前会话内累计的秒数（尚未写入的记录） */
     pendingSeconds: 0,
+    pendingMaxPosition: 0,
+    pendingCompleted: false,
+    pendingCompletedAt: 0,
     /** 上次心跳时间戳 */
     lastTickAt: 0,
     /** 上次保存时间戳 */
@@ -584,6 +602,7 @@
     _lastCurrentTime: NaN,
     /** 是否已经记录过本次打开 */
     opened: false,
+    playCountedForCurrentPlay: false,
     _timer: null,
     _bound: false,
     /** 当前会话标识（URL + bvid），避免守护定时器重复重启 */
@@ -603,9 +622,13 @@
       this.canAccumulate = !!(this.videoEl && !this.videoEl.paused && !this.videoEl.ended);
       this._buffering = false;
       this.pendingSeconds = 0;
+      this.pendingMaxPosition = 0;
+      this.pendingCompleted = false;
+      this.pendingCompletedAt = 0;
       this.lastTickAt = Date.now();
       this.lastSaveAt = 0;
       this.opened = false;
+      this.playCountedForCurrentPlay = false;
       this._lastCurrentTime = NaN;
       this._sessionKey = location.pathname + location.search;
 
@@ -613,6 +636,7 @@
       resolveVideoInfo().then(function (info) {
         if (!self.active) return;
         self.videoInfo = info;
+        self.updateDuration(self.videoEl);
         log('采集已启动', info);
       }).catch(function (err) {
         logError('Collector.start.resolve', err);
@@ -634,6 +658,9 @@
       this.videoEl = null;
       this.videoInfo = null;
       this.pendingSeconds = 0;
+      this.pendingMaxPosition = 0;
+      this.pendingCompleted = false;
+      this.pendingCompletedAt = 0;
       this.canAccumulate = false;
       this._buffering = false;
     },
@@ -652,6 +679,8 @@
         self._lastCurrentTime = v && Number.isFinite(v.currentTime) ? v.currentTime : NaN;
         self._buffering = false;
         self.canAccumulate = true;
+        self.playCountedForCurrentPlay = false;
+        self.updateDuration(v);
       }, true);
       document.addEventListener('pause', function () {
         self.settleTick();
@@ -660,6 +689,7 @@
       }, true);
       document.addEventListener('ended', function () {
         self.settleTick();
+        self.markCompleted(Date.now());
         self.canAccumulate = false;
         self.flush(true);
       }, true);
@@ -674,6 +704,11 @@
         self._lastCurrentTime = v && Number.isFinite(v.currentTime) ? v.currentTime : NaN;
         self._buffering = false;
         self.canAccumulate = true;
+        self.updateDuration(v);
+      }, true);
+      document.addEventListener('loadedmetadata', function (event) {
+        const v = event.target && event.target.tagName === 'VIDEO' ? event.target : self.videoEl;
+        self.updateDuration(v);
       }, true);
 
       // 切后台立即停止累加并保存
@@ -713,12 +748,15 @@
     /** 记录一次"打开"：同天同视频 openCount +1 */
     recordOpen() {
       if (!this.videoInfo || !this.videoInfo.bvid) return;
+      const firstSession = !this.opened;
       this.opened = true;
       const date = todayStr();
       const records = Store.getRecords();
       const idx = findRecordIndex(records, date, this.videoInfo.bvid);
       if (idx >= 0) {
         records[idx].openCount = (Number(records[idx].openCount) || 1) + 1;
+        records[idx].playCount = Math.max(1, Math.floor(Number(records[idx].playCount) || 1)) + (firstSession ? 1 : 0);
+        records[idx].durationSeconds = Math.max(Number(records[idx].durationSeconds) || 0, Number(this.videoInfo.durationSeconds) || 0);
         records[idx].lastActive = Date.now();
         if (this.videoInfo.videoTitle) records[idx].videoTitle = this.videoInfo.videoTitle;
         if (this.videoInfo.uploader) records[idx].uploader = this.videoInfo.uploader;
@@ -737,10 +775,42 @@
           watchedSeconds: 0,
           lastActive: Date.now(),
           openCount: 1,
+          playCount: 1,
+          durationSeconds: Number(this.videoInfo.durationSeconds) || 0,
+          maxPositionSeconds: 0,
+          completed: false,
+          completedAt: 0,
         });
       }
       Store.setRecords(records);
       log('已记录打开', date, this.videoInfo.bvid);
+    },
+
+    /** 记录一次从暂停到播放的有效播放会话。 */
+    recordPlaySession() {
+      if (!this.videoInfo || !this.videoInfo.bvid) return;
+      const date = todayStr();
+      const records = Store.getRecords();
+      const idx = findRecordIndex(records, date, this.videoInfo.bvid);
+      if (!this.opened || idx < 0) {
+        this.recordOpen();
+        return;
+      }
+      records[idx].playCount = Math.max(1, Math.floor(Number(records[idx].playCount) || 1)) + 1;
+      records[idx].lastActive = Date.now();
+      Store.setRecords(records);
+    },
+
+    updateDuration(video) {
+      const duration = Number(video && video.duration);
+      if (!this.videoInfo || !Number.isFinite(duration) || duration <= 0 || duration >= 24 * 60 * 60) return;
+      this.videoInfo.durationSeconds = duration;
+    },
+
+    markCompleted(at) {
+      if (!this.videoInfo || !this.videoInfo.bvid || this.pendingCompleted) return;
+      this.pendingCompleted = true;
+      this.pendingCompletedAt = Number(at) || Date.now();
     },
 
     /** 暂停/结束时结算一次：把上次心跳到当前时刻的播放时长计入 */
@@ -750,11 +820,17 @@
       const video = this.videoEl || document.querySelector('video');
       this.videoEl = video;
       if (this.canAccumulate && video && !this._buffering) {
+        this.updateDuration(video);
         const ctDelta = Number.isFinite(this._lastCurrentTime) && Number.isFinite(video.currentTime)
           ? Math.max(0, video.currentTime - this._lastCurrentTime)
           : 0;
         const delta = Math.min(ctDelta, CONFIG.HEARTBEAT_MS / 1000, CONFIG.MAX_TICK_SECONDS);
         if (delta > 0) this.pendingSeconds += delta;
+      }
+      if (video && Number.isFinite(video.currentTime)) {
+        this.pendingMaxPosition = Math.max(this.pendingMaxPosition, video.currentTime);
+        this.updateDuration(video);
+        this.checkCompletion(video, false);
       }
       this._lastCurrentTime = video && Number.isFinite(video.currentTime) ? video.currentTime : NaN;
       this.lastTickAt = now;
@@ -772,6 +848,7 @@
         const video = this.videoEl || document.querySelector('video');
         this.videoEl = video;
         if (!video) { this.lastTickAt = now; return; }
+        this.updateDuration(video);
         // 脚本可能在播放中途注入，播放中但标志未同步时自动恢复
         if (!video.paused && !video.ended && !this._buffering && !this.canAccumulate) {
           this.canAccumulate = true;
@@ -784,14 +861,22 @@
         if (!Number.isFinite(this._lastCurrentTime)) {
           this._lastCurrentTime = Number.isFinite(video.currentTime) ? video.currentTime : NaN;
           this.lastTickAt = now;
-          if (!this.opened) this.recordOpen();
+          if (!this.playCountedForCurrentPlay) {
+            this.recordPlaySession();
+            this.playCountedForCurrentPlay = true;
+          }
           return;
         }
         const ctDelta = Math.max(0, video.currentTime - this._lastCurrentTime);
         const delta = Math.min(ctDelta, CONFIG.HEARTBEAT_MS / 1000, CONFIG.MAX_TICK_SECONDS);
         this.lastTickAt = now;
-        if (!this.opened) this.recordOpen();
+        if (!this.playCountedForCurrentPlay) {
+          this.recordPlaySession();
+          this.playCountedForCurrentPlay = true;
+        }
         this.pendingSeconds += delta;
+        this.pendingMaxPosition = Math.max(this.pendingMaxPosition, Number(video.currentTime) || 0);
+        this.checkCompletion(video, delta > 0);
         this._lastCurrentTime = video.currentTime;
         log('心跳累加 +' + delta.toFixed(1) + 's，待写入 ' + this.pendingSeconds.toFixed(1) + 's');
 
@@ -805,18 +890,33 @@
     flush(force) {
       if (!this.active && !this.pendingSeconds) return;
       if (!this.videoInfo || !this.videoInfo.bvid) return;
-      if (this.pendingSeconds <= 0) return;
+      if (this.pendingSeconds <= 0 && this.pendingMaxPosition <= 0 && !this.pendingCompleted) return;
       const now = Date.now();
       if (!force && now - this.lastSaveAt < CONFIG.SAVE_THROTTLE_MS) return;
 
       try {
         const seconds = this.pendingSeconds;
         this.pendingSeconds = 0;
+        const maxPosition = this.pendingMaxPosition;
+        const completed = this.pendingCompleted;
+        const completedAt = this.pendingCompletedAt;
+        this.pendingMaxPosition = 0;
+        this.pendingCompleted = false;
+        this.pendingCompletedAt = 0;
         this.lastSaveAt = now;
-        mergeWatchedSeconds(this.videoInfo, seconds, now);
+        mergeWatchedSeconds(this.videoInfo, seconds, now, maxPosition, completed, completedAt);
       } catch (err) {
         logError('Collector.flush', err);
       }
+    },
+
+    checkCompletion(video, progressed) {
+      const duration = Number(this.videoInfo && this.videoInfo.durationSeconds);
+      const position = Number(video && video.currentTime);
+      if (!(duration > 0) || !Number.isFinite(position)) return;
+      const nearEnd = position >= duration - CONFIG.COMPLETION_TOLERANCE_SECONDS;
+      const threshold = position / duration >= CONFIG.COMPLETION_PROGRESS_THRESHOLD;
+      if (video.ended || nearEnd || (progressed && threshold)) this.markCompleted(Date.now());
     },
   };
 
@@ -832,30 +932,36 @@
    * 把观看秒数合并进记录。
    * 跨零点时按当天边界拆分，保证两天各记一条。
    */
-  function mergeWatchedSeconds(info, seconds, endAt) {
-    if (!info || !info.bvid || !(seconds > 0)) return;
+  function mergeWatchedSeconds(info, seconds, endAt, maxPosition, completed, completedAt) {
+    if (!info || !info.bvid || (!(seconds > 0) && !(maxPosition > 0) && !completed)) return;
     const end = new Date(endAt);
     const startAt = endAt - seconds * 1000;
     const start = new Date(startAt);
     const sameDay = formatDate(start) === formatDate(end);
 
     if (sameDay) {
-      applySeconds(formatDate(end), info, seconds, endAt);
+      applySeconds(formatDate(end), info, seconds, endAt, maxPosition, completed, completedAt);
       return;
     }
     const midnight = new Date(end.getFullYear(), end.getMonth(), end.getDate(), 0, 0, 0, 0).getTime();
     const before = Math.max(0, (midnight - startAt) / 1000);
     const after = Math.max(0, (endAt - midnight) / 1000);
-    if (before > 0) applySeconds(formatDate(start), info, before, midnight - 1);
-    if (after > 0) applySeconds(formatDate(end), info, after, endAt);
+    if (before > 0) applySeconds(formatDate(start), info, before, midnight - 1, maxPosition, completed, completedAt);
+    if (after > 0) applySeconds(formatDate(end), info, after, endAt, maxPosition, completed, completedAt);
   }
 
   /** 单日单条记录秒数累加（同天同视频合并） */
-  function applySeconds(date, info, seconds, activeAt) {
+  function applySeconds(date, info, seconds, activeAt, maxPosition, completed, completedAt) {
     const records = Store.getRecords();
     const idx = findRecordIndex(records, date, info.bvid);
     if (idx >= 0) {
       records[idx].watchedSeconds = (Number(records[idx].watchedSeconds) || 0) + seconds;
+      records[idx].durationSeconds = Math.max(Number(records[idx].durationSeconds) || 0, Number(info.durationSeconds) || 0);
+      records[idx].maxPositionSeconds = Math.max(Number(records[idx].maxPositionSeconds) || 0, Number(maxPosition) || 0);
+      if (completed) {
+        records[idx].completed = true;
+        if (!Number(records[idx].completedAt)) records[idx].completedAt = completedAt || activeAt;
+      }
       records[idx].lastActive = activeAt;
       if (info.videoTitle) records[idx].videoTitle = info.videoTitle;
       if (info.uploader) records[idx].uploader = info.uploader;
@@ -875,6 +981,11 @@
         watchedSeconds: seconds,
         lastActive: activeAt,
         openCount: 1,
+        durationSeconds: Number(info.durationSeconds) || 0,
+        maxPositionSeconds: Number(maxPosition) || 0,
+        playCount: 1,
+        completed: completed === true,
+        completedAt: completed ? (completedAt || activeAt) : 0,
       });
     }
     Store.setRecords(records);
@@ -969,12 +1080,76 @@
       return Store.getRecords().concat(Store.getArchive());
     },
 
+    recordProgress(record) {
+      const duration = Number(record && record.durationSeconds);
+      const position = Number(record && record.maxPositionSeconds);
+      return duration > 0 && Number.isFinite(position) ? Math.min(1, Math.max(0, position / duration)) : null;
+    },
+
+    completionRate(records) {
+      const valid = (records || []).filter(function (r) { return Stats.recordProgress(r) !== null; });
+      if (!valid.length) return null;
+      return Math.min(1, Math.max(0, valid.filter(function (r) { return r.completed === true; }).length / valid.length));
+    },
+
+    averageVideoDuration(records) {
+      const list = records || [];
+      const byVideo = Object.create(null);
+      list.forEach(function (r) {
+        if (!r || !r.bvid) return;
+        const sec = Number(r.watchedSeconds) || 0;
+        if (!byVideo[r.bvid]) byVideo[r.bvid] = { seconds: 0 };
+        byVideo[r.bvid].seconds += Math.max(0, sec);
+      });
+      const keys = Object.keys(byVideo);
+      return keys.length ? keys.reduce(function (sum, k) { return sum + byVideo[k].seconds; }, 0) / keys.length : null;
+    },
+
+    repeatWatchCount(records) {
+      return (records || []).reduce(function (sum, r) {
+        return sum + Math.max(0, Math.floor(Number(r && r.playCount) || 1) - 1);
+      }, 0);
+    },
+
+    quality(records, options) {
+      let list = Array.isArray(records) ? records.slice() : [];
+      const opts = options || {};
+      if (opts.dedupeByBvid) {
+        const map = Object.create(null);
+        list.forEach(function (r) {
+          if (!r || !r.bvid) return;
+          const cur = map[r.bvid];
+          if (!cur) { map[r.bvid] = Object.assign({}, r); return; }
+          cur.watchedSeconds = (Number(cur.watchedSeconds) || 0) + (Number(r.watchedSeconds) || 0);
+          cur.maxPositionSeconds = Math.max(Number(cur.maxPositionSeconds) || 0, Number(r.maxPositionSeconds) || 0);
+          cur.durationSeconds = Math.max(Number(cur.durationSeconds) || 0, Number(r.durationSeconds) || 0);
+          cur.playCount = (Number(cur.playCount) || 1) + (Number(r.playCount) || 1);
+          cur.completed = cur.completed === true || r.completed === true;
+          if (r.completedAt && (!cur.completedAt || r.completedAt < cur.completedAt)) cur.completedAt = r.completedAt;
+        });
+        list = Object.keys(map).map(function (k) { return map[k]; });
+      }
+      const progress = list.map(Stats.recordProgress).filter(function (v) { return v !== null; });
+      return {
+        validProgressCount: progress.length,
+        completedCount: list.filter(function (r) { return Stats.recordProgress(r) !== null && r.completed === true; }).length,
+        completionRate: Stats.completionRate(list),
+        averageProgress: progress.length ? progress.reduce(function (a, v) { return a + v; }, 0) / progress.length : null,
+        totalWatchedSeconds: sumSeconds(list),
+        distinctVideoCount: new Set(list.map(function (r) { return r && r.bvid; }).filter(Boolean)).size,
+        averageVideoDuration: Stats.averageVideoDuration(list),
+        repeatWatchCount: Stats.repeatWatchCount(list),
+        recordsWithoutDuration: list.filter(function (r) { return Stats.recordProgress(r) === null; }).length,
+      };
+    },
+
     /** 今日汇总：总量 + UP 主分布 + 活跃时段 + 昨日对比 + 观看明细 */
     today() {
       const date = todayStr();
       const records = Store.getRecords();
       const list = records.filter(function (r) { return r.date === date; });
       const seconds = sumSeconds(list);
+      const quality = this.quality(list);
 
       // 记录只保存最后活跃时间，因此按记录数展示时段，不推算播放时长
       const slots = TIME_SLOTS.map(function (s) {
@@ -1019,6 +1194,7 @@
         peakSlot: peakSlot,
         yesterday: yesterday,
         detail: detail,
+        quality: quality,
       };
     },
 
@@ -1031,25 +1207,35 @@
         return { date: d, label: d.slice(5), seconds: sumSeconds(list) };
       });
       const weekRecords = records.filter(function (r) { return isSameIsoWeek(r.date, new Date()); });
+      const quality = this.quality(weekRecords);
       return {
         daily: daily,
         totalSeconds: daily.reduce(function (a, d) { return a + d.seconds; }, 0),
         topUploaders: groupByUploader(weekRecords).slice(0, 5),
         weekKey: weekKey(new Date()),
+        quality: quality,
       };
     },
 
     /** 全部汇总；query 非空时按标题 / UP 主过滤（大小写不敏感） */
-    all(query) {
+    all(query, qualityFilter) {
       const list = this.allRecords();
       const uploaders = Object.create(null);
       list.forEach(function (r) { uploaders[r.uploader || '未知UP主'] = 1; });
       const q = String(query || '').trim().toLowerCase();
-      const matched = q ? list.filter(function (r) {
+      let matched = q ? list.filter(function (r) {
         return String(r.videoTitle || '').toLowerCase().indexOf(q) >= 0
           || String(r.uploader || '').toLowerCase().indexOf(q) >= 0
           || String(r.bvid || '').toLowerCase().indexOf(q) >= 0;
       }) : list;
+      if (qualityFilter && qualityFilter !== 'all') {
+        matched = matched.filter(function (r) {
+          const progress = Stats.recordProgress(r);
+          if (qualityFilter === 'completed') return r.completed === true && progress !== null;
+          if (qualityFilter === 'incomplete') return progress !== null && r.completed !== true;
+          return progress === null;
+        });
+      }
       const recent = matched.slice()
         .sort(function (a, b) { return (b.lastActive || 0) - (a.lastActive || 0); });
       return {
@@ -1059,6 +1245,7 @@
         matchedCount: matched.length,
         query: q,
         recent: recent.slice(0, 100),
+        quality: this.quality(list, { dedupeByBvid: true }),
       };
     },
 
@@ -1120,6 +1307,7 @@
       const records = Store.getRecords();
       const now = new Date();
       const weekRecords = records.filter(function (r) { return isSameIsoWeek(r.date, now); });
+      const quality = this.quality(weekRecords);
       const start = startOfWeek(now);
       const dates = [];
       for (let i = 0; i < 7; i++) {
@@ -1146,6 +1334,11 @@
           + (peak ? '最常在' + peak + '打开B站' : '观看时段较分散')
           + (fav ? '，最爱「' + fav + '」' : '') + '。';
       }
+      if (quality.validProgressCount > 0) {
+        summary += ' 完播率 ' + formatPercent(quality.completionRate) + '，平均进度 ' + formatPercent(quality.averageProgress) + '，重复观看 ' + quality.repeatWatchCount + ' 次。';
+      } else if (weekRecords.length > 0) {
+        summary += ' 视频总时长信息仍在收集中。';
+      }
       const wow = Stats.weekOverWeek();
       return {
         weekKey: weekKey(now),
@@ -1158,6 +1351,7 @@
         summary: summary,
         streak: Stats.streak(),
         wow: wow,
+        quality: quality,
       };
     },
   };
@@ -1321,6 +1515,10 @@
     '.bwp-search input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font-size: 12.5px; color: #18191c; }',
     '.bwp-search input::placeholder { color: #c9ccd1; }',
     '.bwp-rec-hint { margin: 0 0 8px; font-size: 10.5px; color: #9499a0; }',
+    '.bwp-quality { margin: 0 0 14px; }',
+    '.bwp-quality .bwp-cards { margin-bottom: 0; }',
+    '.bwp-filter { display:flex; gap:6px; margin-bottom:10px; }',
+    '.bwp-filter select { flex:1; min-width:0; padding:8px 9px; border:1px solid #f0f1f3; border-radius:10px; background:#fff; color:#61666d; font-size:11.5px; }',
     /* ---------- 年度热力图 ---------- */
     '.bwp-heat { display: flex; gap: 2px; align-items: flex-start; margin: 2px 0 6px; }',
     '.bwp-heat-col { display: flex; flex: 1; flex-direction: column; gap: 2px; }',
@@ -1368,6 +1566,7 @@
     charts: {},
     current: '今日',
     allQuery: '',
+    qualityFilter: 'all',
     open: false,
     mounted: false,
 
@@ -1593,6 +1792,7 @@
         { num: String(data.count), lbl: '今日视频数' },
         { num: deltaText, lbl: data.yesterday > 0 ? '较昨日' : '昨日无数据' },
       ]));
+      wrap.appendChild(this.qualityBlock(data.quality));
 
       // 视频最后活跃时段（四段，高亮记录数最多的时段）
       wrap.appendChild(this.subTitle('视频活跃时段'));
@@ -1694,7 +1894,10 @@
         const m = document.createElement('div');
         m.className = 'm';
         const left = document.createElement('span');
-        left.textContent = (r.uploader || '未知UP主') + ' · ' + formatDuration(r.watchedSeconds);
+        const progress = Stats.recordProgress(r);
+        left.textContent = (r.uploader || '未知UP主') + ' · ' + formatDuration(r.watchedSeconds)
+          + ' · 进度 ' + formatPercent(progress)
+          + (r.playCount > 1 ? ' · 重看 ' + (r.playCount - 1) + ' 次' : '');
         const right = document.createElement('span');
         right.textContent = formatClock(r.lastActive) + (r.openCount > 1 ? ' · 打开' + r.openCount + '次' : '');
         m.appendChild(left); m.appendChild(right);
@@ -1766,6 +1969,7 @@
         { num: streak > 0 ? streak + '天' : '0天', lbl: '连续观看' },
         { num: deltaText, lbl: '环比上周' },
       ]));
+      this.el.body.appendChild(this.qualityBlock(data.quality));
       this.el.body.appendChild(this.subTitle('近 7 天每日时长 · ' + data.weekKey));
       this.el.body.appendChild(this.chartBox('weekDaily'));
       this.makeChart('weekDaily', {
@@ -1781,6 +1985,20 @@
           }],
         },
         options: { plugins: { legend: { display: false } } },
+      });
+      this.el.body.appendChild(this.subTitle('每日完播率'));
+      this.el.body.appendChild(this.chartBox('weekCompletion'));
+      this.makeChart('weekCompletion', {
+        type: 'line',
+        data: { labels: data.daily.map(function (d) { return d.label; }), datasets: [{ label: '完播率', data: data.daily.map(function (d) { return Stats.completionRate(Store.getRecords().filter(function (r) { return r.date === d.date; })); }).map(function (v) { return v === null ? null : Math.round(v * 100); }), borderColor: CHART_COLORS[2], backgroundColor: 'rgba(224,92,130,.12)', fill: true, tension: .35, pointRadius: 3 }] },
+        options: { scales: { y: { beginAtZero: true, max: 100, ticks: { callback: function (v) { return v + '%'; } } } }, plugins: { legend: { display: false } } },
+      });
+      this.el.body.appendChild(this.subTitle('每日平均观看进度'));
+      this.el.body.appendChild(this.chartBox('weekProgress'));
+      this.makeChart('weekProgress', {
+        type: 'bar',
+        data: { labels: data.daily.map(function (d) { return d.label; }), datasets: [{ label: '平均进度', data: data.daily.map(function (d) { const q = Stats.quality(Store.getRecords().filter(function (r) { return r.date === d.date; })); return q.averageProgress === null ? null : Math.round(q.averageProgress * 100); }), backgroundColor: CHART_COLORS[1], borderRadius: 8, borderSkipped: false }] },
+        options: { scales: { y: { beginAtZero: true, max: 100, ticks: { callback: function (v) { return v + '%'; } } } }, plugins: { legend: { display: false } } },
       });
       this.el.body.appendChild(this.subTitle('本周 Top5 UP 主'));
       if (data.topUploaders.length === 0) {
@@ -1806,13 +2024,14 @@
     /** 全部 Tab：归档提示 + 年度热力图 + 记录搜索 */
     renderAll() {
       const self = this;
-      const data = Stats.all(this.allQuery);
+      const data = Stats.all(this.allQuery, this.qualityFilter);
       if (data.count === 0) { this.empty('还没有任何观看记录'); return; }
       this.el.body.appendChild(this.cards([
         { num: formatDuration(data.seconds), lbl: '累计总时长' },
         { num: String(data.count), lbl: '总视频数' },
         { num: String(data.uploaderCount), lbl: '覆盖UP主' },
       ]));
+      this.el.body.appendChild(this.qualityBlock(data.quality));
 
       this.el.body.appendChild(this.archiveNotice());
 
@@ -1828,6 +2047,15 @@
         if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
       });
       this.el.body.appendChild(search);
+      const filter = document.createElement('div');
+      filter.className = 'bwp-filter';
+      const select = document.createElement('select');
+      [['all', '全部'], ['completed', '已完播'], ['incomplete', '未完播'], ['unknown', '进度未知']].forEach(function (item) {
+        const option = document.createElement('option'); option.value = item[0]; option.textContent = item[1]; option.selected = self.qualityFilter === item[0]; select.appendChild(option);
+      });
+      select.addEventListener('change', function () { self.qualityFilter = select.value; self.render(); });
+      filter.appendChild(select);
+      this.el.body.appendChild(filter);
 
       const hint = document.createElement('div');
       hint.className = 'bwp-rec-hint';
@@ -1852,7 +2080,10 @@
         const m = document.createElement('div');
         m.className = 'm';
         const left = document.createElement('span');
-        left.textContent = (r.uploader || '未知UP主') + ' · ' + formatDuration(r.watchedSeconds);
+        const progress = Stats.recordProgress(r);
+        left.textContent = (r.uploader || '未知UP主') + ' · ' + formatDuration(r.watchedSeconds)
+          + ' · 进度 ' + formatPercent(progress)
+          + (r.playCount > 1 ? ' · 重看 ' + (r.playCount - 1) + ' 次' : '');
         const right = document.createElement('span');
         right.textContent = r.date + (r.openCount > 1 ? ' · 打开' + r.openCount + '次' : '');
         m.appendChild(left); m.appendChild(right);
@@ -1880,6 +2111,19 @@
         c.appendChild(n); c.appendChild(l);
         wrap.appendChild(c);
       });
+      return wrap;
+    },
+
+    qualityBlock(quality) {
+      const wrap = document.createElement('div');
+      wrap.className = 'bwp-quality';
+      wrap.appendChild(this.subTitle('观看质量'));
+      wrap.appendChild(this.cards([
+        { num: formatPercent(quality.completionRate), lbl: '完播率' },
+        { num: formatPercent(quality.averageProgress), lbl: '平均进度' },
+        { num: quality.repeatWatchCount ? quality.repeatWatchCount + '次' : '—', lbl: '重复观看' },
+        { num: quality.averageVideoDuration === null ? '—' : formatDuration(quality.averageVideoDuration), lbl: '平均单视频时长' },
+      ]));
       return wrap;
     },
 
@@ -2120,6 +2364,11 @@
               updated++;
             }
             cur.openCount = Math.max(Number(cur.openCount) || 1, Number(r.openCount) || 1);
+            cur.durationSeconds = Math.max(Number(cur.durationSeconds) || 0, Number(r.durationSeconds) || 0);
+            cur.maxPositionSeconds = Math.max(Number(cur.maxPositionSeconds) || 0, Number(r.maxPositionSeconds) || 0);
+            cur.playCount = Math.max(Number(cur.playCount) || 1, Number(r.playCount) || 1);
+            cur.completed = cur.completed === true || r.completed === true;
+            if (r.completedAt && (!cur.completedAt || r.completedAt < cur.completedAt)) cur.completedAt = r.completedAt;
             cur.lastActive = Math.max(Number(cur.lastActive) || 0, Number(r.lastActive) || 0);
             if (!cur.videoTitle && r.videoTitle) cur.videoTitle = r.videoTitle;
             if (!cur.uploader && r.uploader) cur.uploader = r.uploader;
@@ -2341,6 +2590,14 @@
       + wowText + '。';
     root.appendChild(sum);
 
+    const quality = document.createElement('div');
+    quality.className = 'bwp-rp-sec bwp-anim';
+    quality.style.setProperty('--bwp-i', 7);
+    const qh = document.createElement('h4'); qh.textContent = '观看质量'; quality.appendChild(qh);
+    const qt = document.createElement('div'); qt.textContent = '完播率 ' + formatPercent(data.quality.completionRate) + ' · 平均进度 ' + formatPercent(data.quality.averageProgress) + ' · 重复观看 ' + data.quality.repeatWatchCount + ' 次';
+    quality.appendChild(qt);
+    root.appendChild(quality);
+
     return root;
   }
 
@@ -2509,7 +2766,7 @@
     safe(function () {
       Store.initSchema();
       wrapHistory();
-      log('脚本已加载，版本 0.3.1', location.href);
+      log('脚本已加载，版本 0.4.0', location.href);
 
       // 阶段 3：仅视频页启用采集（SPA 路由切换由守护定时器处理）
       safe(function () { ensureCollector(); }, 'ensureCollector');

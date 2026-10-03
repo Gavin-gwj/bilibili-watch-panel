@@ -2,6 +2,19 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/v1.0.0/)。
 
+## [0.4.0] - 2026-10-03
+
+### Added
+
+- 新增观看质量字段：视频总时长、最高播放位置、有效播放会话数、完播状态和首次完播时间。
+- 新增完播率、平均观看进度、重复观看次数、平均单视频观看时长统计。
+- 今日、本周、全部和报告 Tab 增加质量摘要；本周增加完播率与平均进度图表；全部支持完播状态筛选。
+
+### Changed
+
+- schema 版本升级到 2；旧 JSON 和旧 `watchRecords` 读取时自动补齐字段，不推断历史完播。
+- JSON 导入合并新字段时采用时长/位置取较大值、播放会话取较大值、完播逻辑或、完播时间取最早值。
+
 ## [0.3.1] - 2026-10-02
 
 ### Added
