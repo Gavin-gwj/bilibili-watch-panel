@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili Watch Panel
 // @namespace    https://github.com/Gavin-gwj/bilibili-watch-panel
-// @version      0.6.0
+// @version      0.7.0
 // @description  本地B站观看数据统计与可视化面板
 // @author       Gavin-gwj
 // @match        https://*.bilibili.com/*
@@ -77,7 +77,7 @@
       WEEKLY_GOAL: 'weeklyGoalSeconds',
     },
     /** 当前数据结构版本 */
-    SCHEMA_VERSION: 2,
+    SCHEMA_VERSION: 3,
     COMPLETION_TOLERANCE_SECONDS: 2,
     COMPLETION_PROGRESS_THRESHOLD: 0.95,
     DEFAULT_WEEKLY_GOAL_SECONDS: 3600,
@@ -192,6 +192,11 @@
     return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
   }
 
+  function formatDateTime(ts) {
+    if (!Number(ts)) return '—';
+    return formatDate(new Date(Number(ts))) + ' ' + formatClock(ts);
+  }
+
   /** ISO 周计算：返回 {year, week}，周一为一周起点 */
   function getIsoWeek(date) {
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -269,6 +274,43 @@
       && Number.isFinite(r.lastActive);
   }
 
+  /** 清洗单条播放会话；旧记录没有会话时保持空数组，不推断历史数据。 */
+  function sanitizeSession(s) {
+    if (!s || typeof s !== 'object') return null;
+    const startAt = Number(s.startAt);
+    const endAt = Number(s.endAt);
+    if (!(startAt > 0) || !(endAt >= startAt)) return null;
+    const reason = ['ended', 'pause', 'hidden', 'route', 'pagehide', 'unload', 'unknown'].indexOf(s.endReason) >= 0
+      ? s.endReason : 'unknown';
+    return {
+      startAt: startAt,
+      endAt: endAt,
+      watchedSeconds: Math.max(0, Number(s.watchedSeconds) || 0),
+      pauseCount: Math.max(0, Math.floor(Number(s.pauseCount) || 0)),
+      backgroundCount: Math.max(0, Math.floor(Number(s.backgroundCount) || 0)),
+      seekCount: Math.max(0, Math.floor(Number(s.seekCount) || 0)),
+      endReason: reason,
+    };
+  }
+
+  function sessionKey(s) {
+    return [s.startAt, s.endAt, s.endReason].join(':');
+  }
+
+  /** 合并并去重会话，保证重复导入同一备份不会复制会话。 */
+  function mergeSessions() {
+    const map = Object.create(null);
+    for (let i = 0; i < arguments.length; i++) {
+      const list = Array.isArray(arguments[i]) ? arguments[i] : [];
+      list.forEach(function (raw) {
+        const s = sanitizeSession(raw);
+        if (s) map[sessionKey(s)] = s;
+      });
+    }
+    return Object.keys(map).map(function (key) { return map[key]; })
+      .sort(function (a, b) { return a.startAt - b.startAt; });
+  }
+
   /** 清洗单条记录，坏数据返回 null */
   function sanitizeRecord(r) {
     if (!isValidRecord(r)) return null;
@@ -292,6 +334,7 @@
         ? Math.floor(r.playCount) : Math.max(1, Number(r.openCount) || 1),
       completed: r.completed === true,
       completedAt: Number.isFinite(r.completedAt) ? r.completedAt : 0,
+      sessions: mergeSessions(r.sessions),
     };
   }
 
@@ -589,6 +632,8 @@
     pendingMaxPosition: 0,
     pendingCompleted: false,
     pendingCompletedAt: 0,
+    pendingSession: null,
+    currentSession: null,
     /** 上次心跳时间戳 */
     lastTickAt: 0,
     /** 上次保存时间戳 */
@@ -627,6 +672,8 @@
       this.pendingMaxPosition = 0;
       this.pendingCompleted = false;
       this.pendingCompletedAt = 0;
+      this.pendingSession = null;
+      this.currentSession = null;
       this.lastTickAt = Date.now();
       this.lastSaveAt = 0;
       this.opened = false;
@@ -655,7 +702,11 @@
         clearInterval(this._timer);
         this._timer = null;
       }
-      if (this.active && save !== false) this.flush(true);
+      if (this.active && save !== false) {
+        this.settleTick();
+        this.endSession('route', Date.now());
+        this.flush(true);
+      }
       this.active = false;
       this.videoEl = null;
       this.videoInfo = null;
@@ -663,6 +714,8 @@
       this.pendingMaxPosition = 0;
       this.pendingCompleted = false;
       this.pendingCompletedAt = 0;
+      this.pendingSession = null;
+      this.currentSession = null;
       this.canAccumulate = false;
       this._buffering = false;
     },
@@ -677,23 +730,39 @@
       document.addEventListener('play', function () {
         const v = self.videoEl || document.querySelector('video');
         self.videoEl = v;
+        self.playCountedForCurrentPlay = false;
+        self.beginSession();
         self.lastTickAt = Date.now();
         self._lastCurrentTime = v && Number.isFinite(v.currentTime) ? v.currentTime : NaN;
         self._buffering = false;
         self.canAccumulate = true;
-        self.playCountedForCurrentPlay = false;
         self.updateDuration(v);
       }, true);
       document.addEventListener('pause', function () {
         self.settleTick();
+        if (self.currentSession) self.currentSession.pauseCount += 1;
+        self.endSession('pause', Date.now());
         self.canAccumulate = false;
         self.flush(true);
       }, true);
       document.addEventListener('ended', function () {
         self.settleTick();
         self.markCompleted(Date.now());
+        self.endSession('ended', Date.now());
         self.canAccumulate = false;
         self.flush(true);
+      }, true);
+      document.addEventListener('seeking', function () {
+        if (self.currentSession) self.currentSession.seekCount += 1;
+        self._lastCurrentTime = NaN;
+        self.canAccumulate = false;
+      }, true);
+      document.addEventListener('seeked', function () {
+        const v = self.videoEl || document.querySelector('video');
+        self.videoEl = v;
+        self._lastCurrentTime = v && Number.isFinite(v.currentTime) ? v.currentTime : NaN;
+        self.lastTickAt = Date.now();
+        self.canAccumulate = !!(v && !v.paused && !v.ended && !self._buffering && !document.hidden);
       }, true);
       document.addEventListener('waiting', function () {
         self._buffering = true;
@@ -702,6 +771,8 @@
       document.addEventListener('playing', function () {
         const v = self.videoEl || document.querySelector('video');
         self.videoEl = v;
+        if (!self.currentSession) self.playCountedForCurrentPlay = false;
+        self.beginSession();
         self.lastTickAt = Date.now();
         self._lastCurrentTime = v && Number.isFinite(v.currentTime) ? v.currentTime : NaN;
         self._buffering = false;
@@ -716,6 +787,10 @@
       // 切后台立即停止累加并保存
       document.addEventListener('visibilitychange', function () {
         if (document.hidden) {
+          self.settleTick();
+          if (self.currentSession) self.currentSession.backgroundCount += 1;
+          self.endSession('hidden', Date.now());
+          self.playCountedForCurrentPlay = false;
           self.canAccumulate = false;
           self.flush(true);
         } else {
@@ -723,13 +798,25 @@
           self.lastTickAt = Date.now();
           const v = self.videoEl || document.querySelector('video');
           self.videoEl = v;
+          if (v && !v.paused && !v.ended && !self._buffering) {
+            self.playCountedForCurrentPlay = false;
+            self.beginSession();
+          }
           self.canAccumulate = !!(v && !v.paused && !v.ended && !self._buffering);
         }
       });
 
       // 页面关闭前最终结算
-      window.addEventListener('pagehide', function () { self.flush(true); });
-      window.addEventListener('beforeunload', function () { self.flush(true); });
+      window.addEventListener('pagehide', function () {
+        self.settleTick();
+        self.endSession('pagehide', Date.now());
+        self.flush(true);
+      });
+      window.addEventListener('beforeunload', function () {
+        self.settleTick();
+        self.endSession('unload', Date.now());
+        self.flush(true);
+      });
 
       // B 站是 SPA，URL 变化时重建采集会话
       let lastHref = location.href;
@@ -745,6 +832,33 @@
       // 轮询兜底统一由 Bootstrap 的路由守护负责，这里不再另起定时器
 
       log('采集事件已绑定');
+    },
+
+    /** 开始一次有效播放会话；同一播放周期内重复 playing 不重复创建。 */
+    beginSession() {
+      if (this.currentSession) return;
+      this.currentSession = {
+        startAt: Date.now(),
+        endAt: 0,
+        watchedSeconds: 0,
+        pauseCount: 0,
+        backgroundCount: 0,
+        seekCount: 0,
+        endReason: 'unknown',
+      };
+      if (this.videoInfo && !this.playCountedForCurrentPlay) {
+        this.recordPlaySession();
+        this.playCountedForCurrentPlay = true;
+      }
+    },
+
+    /** 结束当前会话；重复触发 pagehide/beforeunload 时保持幂等。 */
+    endSession(reason, at) {
+      if (!this.currentSession) return;
+      this.currentSession.endAt = Number(at) || Date.now();
+      this.currentSession.endReason = reason || 'unknown';
+      this.pendingSession = this.currentSession;
+      this.currentSession = null;
     },
 
     /** 记录一次"打开"：同天同视频 openCount +1 */
@@ -782,6 +896,7 @@
           maxPositionSeconds: 0,
           completed: false,
           completedAt: 0,
+           sessions: [],
         });
       }
       Store.setRecords(records);
@@ -827,7 +942,10 @@
           ? Math.max(0, video.currentTime - this._lastCurrentTime)
           : 0;
         const delta = Math.min(ctDelta, CONFIG.HEARTBEAT_MS / 1000, CONFIG.MAX_TICK_SECONDS);
-        if (delta > 0) this.pendingSeconds += delta;
+        if (delta > 0) {
+          this.pendingSeconds += delta;
+          if (this.currentSession) this.currentSession.watchedSeconds += delta;
+        }
       }
       if (video && Number.isFinite(video.currentTime)) {
         this.pendingMaxPosition = Math.max(this.pendingMaxPosition, video.currentTime);
@@ -861,6 +979,7 @@
         }
         // 第一次心跳只建立播放进度基准，保证后续只统计真实推进量
         if (!Number.isFinite(this._lastCurrentTime)) {
+          this.beginSession();
           this._lastCurrentTime = Number.isFinite(video.currentTime) ? video.currentTime : NaN;
           this.lastTickAt = now;
           if (!this.playCountedForCurrentPlay) {
@@ -872,11 +991,13 @@
         const ctDelta = Math.max(0, video.currentTime - this._lastCurrentTime);
         const delta = Math.min(ctDelta, CONFIG.HEARTBEAT_MS / 1000, CONFIG.MAX_TICK_SECONDS);
         this.lastTickAt = now;
+        this.beginSession();
         if (!this.playCountedForCurrentPlay) {
           this.recordPlaySession();
           this.playCountedForCurrentPlay = true;
         }
         this.pendingSeconds += delta;
+        if (this.currentSession) this.currentSession.watchedSeconds += delta;
         this.pendingMaxPosition = Math.max(this.pendingMaxPosition, Number(video.currentTime) || 0);
         this.checkCompletion(video, delta > 0);
         this._lastCurrentTime = video.currentTime;
@@ -890,9 +1011,9 @@
 
     /** 结算并写入存储；saveThrottle 为 true 时受节流限制 */
     flush(force) {
-      if (!this.active && !this.pendingSeconds) return;
+      if (!this.active && !this.pendingSeconds && !this.pendingSession) return;
       if (!this.videoInfo || !this.videoInfo.bvid) return;
-      if (this.pendingSeconds <= 0 && this.pendingMaxPosition <= 0 && !this.pendingCompleted) return;
+      if (this.pendingSeconds <= 0 && this.pendingMaxPosition <= 0 && !this.pendingCompleted && !this.pendingSession) return;
       const now = Date.now();
       if (!force && now - this.lastSaveAt < CONFIG.SAVE_THROTTLE_MS) return;
 
@@ -902,11 +1023,13 @@
         const maxPosition = this.pendingMaxPosition;
         const completed = this.pendingCompleted;
         const completedAt = this.pendingCompletedAt;
+        const session = this.pendingSession;
         this.pendingMaxPosition = 0;
         this.pendingCompleted = false;
         this.pendingCompletedAt = 0;
+        this.pendingSession = null;
         this.lastSaveAt = now;
-        mergeWatchedSeconds(this.videoInfo, seconds, now, maxPosition, completed, completedAt);
+        mergeWatchedSeconds(this.videoInfo, seconds, now, maxPosition, completed, completedAt, session);
       } catch (err) {
         logError('Collector.flush', err);
       }
@@ -934,15 +1057,15 @@
    * 把观看秒数合并进记录。
    * 跨零点时按当天边界拆分，保证两天各记一条。
    */
-  function mergeWatchedSeconds(info, seconds, endAt, maxPosition, completed, completedAt) {
-    if (!info || !info.bvid || (!(seconds > 0) && !(maxPosition > 0) && !completed)) return;
+  function mergeWatchedSeconds(info, seconds, endAt, maxPosition, completed, completedAt, session) {
+    if (!info || !info.bvid || (!(seconds > 0) && !(maxPosition > 0) && !completed && !session)) return;
     const end = new Date(endAt);
     const startAt = endAt - seconds * 1000;
     const start = new Date(startAt);
     const sameDay = formatDate(start) === formatDate(end);
 
     if (sameDay) {
-      applySeconds(formatDate(end), info, seconds, endAt, maxPosition, completed, completedAt);
+      applySeconds(formatDate(end), info, seconds, endAt, maxPosition, completed, completedAt, session);
       return;
     }
     const midnight = new Date(end.getFullYear(), end.getMonth(), end.getDate(), 0, 0, 0, 0).getTime();
@@ -950,10 +1073,11 @@
     const after = Math.max(0, (endAt - midnight) / 1000);
     if (before > 0) applySeconds(formatDate(start), info, before, midnight - 1, maxPosition, completed, completedAt);
     if (after > 0) applySeconds(formatDate(end), info, after, endAt, maxPosition, completed, completedAt);
+    if (session) applySeconds(formatDate(new Date(session.startAt)), info, 0, session.endAt, 0, false, 0, session);
   }
 
   /** 单日单条记录秒数累加（同天同视频合并） */
-  function applySeconds(date, info, seconds, activeAt, maxPosition, completed, completedAt) {
+  function applySeconds(date, info, seconds, activeAt, maxPosition, completed, completedAt, session) {
     const records = Store.getRecords();
     const idx = findRecordIndex(records, date, info.bvid);
     if (idx >= 0) {
@@ -970,6 +1094,7 @@
       if (info.uploaderId) records[idx].uploaderId = info.uploaderId;
       if (info.videoId) records[idx].videoId = info.videoId;
       if (!Number.isFinite(records[idx].openCount) || records[idx].openCount < 1) records[idx].openCount = 1;
+      records[idx].sessions = mergeSessions(records[idx].sessions, session ? [session] : []);
     } else {
       records.push({
         id: date + '_' + info.bvid,
@@ -988,10 +1113,11 @@
         playCount: 1,
         completed: completed === true,
         completedAt: completed ? (completedAt || activeAt) : 0,
+        sessions: session ? mergeSessions([session]) : [],
       });
     }
     Store.setRecords(records);
-    log('已写入观看时长', date, info.bvid, seconds.toFixed(1) + 's');
+    log('已写入观看数据', date, info.bvid, seconds.toFixed(1) + 's');
     // 容量控制：达到阈值时归档旧记录，保持面板与存储轻量
     if (records.length > CONFIG.ARCHIVE_THRESHOLD) archiveIfNeeded();
   }
@@ -1113,6 +1239,25 @@
       }, 0);
     },
 
+    sessionStats(records) {
+      const sessions = [];
+      (records || []).forEach(function (r) {
+        if (r && Array.isArray(r.sessions)) sessions.push.apply(sessions, r.sessions);
+      });
+      const total = sessions.length;
+      const interrupted = sessions.filter(function (s) { return s.endReason !== 'ended'; }).length;
+      const watched = sessions.reduce(function (sum, s) { return sum + (Number(s.watchedSeconds) || 0); }, 0);
+      return {
+        sessionCount: total,
+        interruptedSessionCount: interrupted,
+        interruptionRate: total ? interrupted / total : null,
+        averageSessionSeconds: total ? watched / total : null,
+        pauseCount: sessions.reduce(function (sum, s) { return sum + (Number(s.pauseCount) || 0); }, 0),
+        backgroundCount: sessions.reduce(function (sum, s) { return sum + (Number(s.backgroundCount) || 0); }, 0),
+        seekCount: sessions.reduce(function (sum, s) { return sum + (Number(s.seekCount) || 0); }, 0),
+      };
+    },
+
     quality(records, options) {
       let list = Array.isArray(records) ? records.slice() : [];
       const opts = options || {};
@@ -1128,10 +1273,12 @@
           cur.playCount = (Number(cur.playCount) || 1) + (Number(r.playCount) || 1);
           cur.completed = cur.completed === true || r.completed === true;
           if (r.completedAt && (!cur.completedAt || r.completedAt < cur.completedAt)) cur.completedAt = r.completedAt;
+          cur.sessions = mergeSessions(cur.sessions, r.sessions);
         });
         list = Object.keys(map).map(function (k) { return map[k]; });
       }
       const progress = list.map(Stats.recordProgress).filter(function (v) { return v !== null; });
+      const sessions = Stats.sessionStats(list);
       return {
         validProgressCount: progress.length,
         completedCount: list.filter(function (r) { return Stats.recordProgress(r) !== null && r.completed === true; }).length,
@@ -1142,6 +1289,13 @@
         averageVideoDuration: Stats.averageVideoDuration(list),
         repeatWatchCount: Stats.repeatWatchCount(list),
         recordsWithoutDuration: list.filter(function (r) { return Stats.recordProgress(r) === null; }).length,
+        sessionCount: sessions.sessionCount,
+        interruptedSessionCount: sessions.interruptedSessionCount,
+        interruptionRate: sessions.interruptionRate,
+        averageSessionSeconds: sessions.averageSessionSeconds,
+        pauseCount: sessions.pauseCount,
+        backgroundCount: sessions.backgroundCount,
+        seekCount: sessions.seekCount,
       };
     },
 
@@ -1520,6 +1674,7 @@
     '.bwp-list { display: flex; flex-direction: column; gap: 8px; }',
     '.bwp-item { padding: 10px 12px; border-radius: var(--bwp-radius-md); background: var(--bwp-surface); border: 1px solid var(--bwp-border); box-shadow: var(--bwp-shadow-sm); transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }',
     '.bwp-item:hover { transform: translateY(-1px); border-color: var(--bwp-pink-border); box-shadow: var(--bwp-shadow-pink); }',
+    '.bwp-item:focus-visible { outline: 2px solid var(--bwp-pink); outline-offset: 2px; }',
     '.bwp-item .t { font-size: 12.5px; font-weight: 600; line-height: 1.45; color: var(--bwp-text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }',
     '.bwp-item .m { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; font-size: 10.5px; color: var(--bwp-text-3); }',
     '.bwp-item .m span:first-child { color: var(--bwp-text-2); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
@@ -1601,6 +1756,17 @@
     '.bwp-rec-hint { margin: 0 0 8px; font-size: 10.5px; color: var(--bwp-text-3); }',
     '.bwp-quality { margin: 0 0 14px; }',
     '.bwp-quality .bwp-cards { margin-bottom: 0; }',
+    '.bwp-session-title { margin-top: 12px; }',
+    '.bwp-detail-drawer { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; background: var(--bwp-bg); color: var(--bwp-text); }',
+    '.bwp-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; background: var(--bwp-surface); border-bottom: 1px solid var(--bwp-border); }',
+    '.bwp-detail-back { border: none; background: transparent; color: var(--bwp-pink-strong); font-size: 12px; font-weight: 600; cursor: pointer; padding: 6px 2px; }',
+    '.bwp-detail-body { overflow-y: auto; padding: 16px 14px 24px; }',
+    '.bwp-detail-body h3 { margin: 0; font-size: 16px; line-height: 1.45; overflow-wrap: anywhere; }',
+    '.bwp-detail-meta { margin: 6px 0 14px; color: var(--bwp-text-3); font-size: 11px; }',
+    '.bwp-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }',
+    '.bwp-detail-grid > div { min-width: 0; padding: 10px; border: 1px solid var(--bwp-border); border-radius: var(--bwp-radius-sm); background: var(--bwp-surface); }',
+    '.bwp-detail-grid .k { display: block; color: var(--bwp-text-3); font-size: 10.5px; }',
+    '.bwp-detail-grid .v { display: block; margin-top: 4px; color: var(--bwp-text); font-size: 12px; overflow-wrap: anywhere; }',
     '.bwp-filter { display: flex; gap: 6px; margin-bottom: 10px; }',
     '.bwp-filter select { flex: 1; min-width: 0; padding: 8px 9px; border: 1px solid var(--bwp-border-strong); border-radius: var(--bwp-radius-sm); background: var(--bwp-surface); color: var(--bwp-text-2); font-size: 11.5px; }',
     /* ---------- 年度热力图 ---------- */
@@ -1653,6 +1819,7 @@
     weekRangeDays: 7,
     open: false,
     mounted: false,
+    detailDrawer: null,
 
     /** 挂载面板到页面（幂等） */
     mount() {
@@ -1736,7 +1903,9 @@
       });
       // ESC 关闭
       document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape' && self.open) self.hide();
+        if (e.key !== 'Escape' || !self.open) return;
+        if (self.detailDrawer) self.closeRecordDetail();
+        else self.hide();
       });
       // 浮动按钮拖动（位置持久化，关闭按钮固定不动）
       this.bindFabDrag();
@@ -1818,6 +1987,7 @@
     hide() {
       const self = this;
       safe(function () {
+        self.closeRecordDetail();
         self.el.panel.classList.remove('open');
         self.open = false;
         self.destroyCharts();
@@ -1845,12 +2015,93 @@
       if (!this.open) return;
       const self = this;
       safe(function () {
+        self.closeRecordDetail();
         self.el.body.innerHTML = '';
         if (self.current === '今日') self.renderToday();
         else if (self.current === '本周') self.renderWeek();
         else if (self.current === '全部') self.renderAll();
         else if (self.current === '报告' && typeof self.renderReportTab === 'function') self.renderReportTab();
       }, 'Panel.render.' + self.current);
+    },
+
+    bindRecordItem(item, record) {
+      const self = this;
+      item.tabIndex = 0;
+      item.setAttribute('role', 'button');
+      item.setAttribute('aria-label', '查看观看记录详情');
+      item.addEventListener('click', function () { self.showRecordDetail(record); });
+      item.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          self.showRecordDetail(record);
+        }
+      });
+    },
+
+    showRecordDetail(record) {
+      this.closeRecordDetail();
+      if (!record || !this.el.panel) return;
+      const drawer = document.createElement('section');
+      drawer.className = 'bwp-detail-drawer';
+      const head = document.createElement('div');
+      head.className = 'bwp-detail-head';
+      const back = document.createElement('button');
+      back.type = 'button'; back.className = 'bwp-detail-back'; back.textContent = '‹ 返回';
+      back.addEventListener('click', this.closeRecordDetail.bind(this));
+      const close = document.createElement('button');
+      close.type = 'button'; close.className = 'bwp-close'; close.textContent = '×';
+      close.addEventListener('click', this.closeRecordDetail.bind(this));
+      head.appendChild(back); head.appendChild(close);
+      drawer.appendChild(head);
+
+      const body = document.createElement('div');
+      body.className = 'bwp-detail-body';
+      const title = document.createElement('h3');
+      title.textContent = record.videoTitle || record.bvid || '未知视频';
+      body.appendChild(title);
+      const meta = document.createElement('p');
+      meta.className = 'bwp-detail-meta';
+      meta.textContent = (record.uploader || '未知UP主') + ' · ' + record.date;
+      body.appendChild(meta);
+
+      const sessions = Stats.sessionStats([record]);
+      const sessionList = Array.isArray(record.sessions) ? record.sessions.slice().sort(function (a, b) { return a.startAt - b.startAt; }) : [];
+      const firstAt = sessionList.length ? sessionList[0].startAt : record.timestamp;
+      const recentAt = sessionList.length ? sessionList[sessionList.length - 1].endAt : record.lastActive;
+      body.appendChild(this.cards([
+        { num: formatDuration(record.watchedSeconds), lbl: '总观看时长', compact: true },
+        { num: formatPercent(Stats.recordProgress(record)), lbl: '最高进度', compact: true },
+        { num: record.completed ? '已完播' : '未完播', lbl: '完播状态', compact: true },
+        { num: sessions.sessionCount ? String(sessions.sessionCount) : '暂无数据', lbl: '播放会话数', compact: true },
+      ]));
+
+      const grid = document.createElement('div');
+      grid.className = 'bwp-detail-grid';
+      const values = [
+        ['首次观看', formatDateTime(firstAt)],
+        ['最近观看', formatDateTime(recentAt)],
+        ['中断率', sessions.sessionCount ? formatPercent(sessions.interruptionRate) : '暂无数据'],
+        ['平均单次会话', sessions.sessionCount ? formatDuration(sessions.averageSessionSeconds) : '暂无数据'],
+        ['暂停次数', String(sessions.pauseCount)],
+        ['切后台次数', String(sessions.backgroundCount)],
+        ['跳转次数', String(sessions.seekCount)],
+        ['BV 号', record.bvid || '—'],
+      ];
+      values.forEach(function (entry) {
+        const cell = document.createElement('div');
+        const label = document.createElement('span'); label.className = 'k'; label.textContent = entry[0];
+        const value = document.createElement('strong'); value.className = 'v'; value.textContent = entry[1];
+        cell.appendChild(label); cell.appendChild(value); grid.appendChild(cell);
+      });
+      body.appendChild(grid);
+      drawer.appendChild(body);
+      this.el.panel.appendChild(drawer);
+      this.detailDrawer = drawer;
+    },
+
+    closeRecordDetail() {
+      if (this.detailDrawer && this.detailDrawer.parentNode) this.detailDrawer.parentNode.removeChild(this.detailDrawer);
+      this.detailDrawer = null;
     },
 
     /** 今日 Tab：今日概览 → 观看质量 → 趋势 → 观看记录 */
@@ -2052,6 +2303,7 @@
           tags.appendChild(tagR);
         }
         item.appendChild(t); item.appendChild(m); item.appendChild(tags);
+        Panel.bindRecordItem(item, r);
         list.appendChild(item);
       });
       wrap.appendChild(list);
@@ -2240,6 +2492,7 @@
           tags.appendChild(tagR);
         }
         item.appendChild(t); item.appendChild(m); item.appendChild(tags);
+        Panel.bindRecordItem(item, r);
         list.appendChild(item);
       });
       this.el.body.appendChild(list);
@@ -2274,6 +2527,13 @@
         { num: formatPercent(quality.averageProgress), lbl: '平均进度', compact: compact },
         { num: quality.repeatWatchCount ? quality.repeatWatchCount + '次' : '—', lbl: '重复观看', compact: compact },
         { num: quality.averageVideoDuration === null ? '—' : formatDuration(quality.averageVideoDuration), lbl: '平均单视频时长', compact: compact },
+      ]));
+      const sessionTitle = this.subTitle('播放会话');
+      sessionTitle.className += ' bwp-session-title';
+      wrap.appendChild(sessionTitle);
+      wrap.appendChild(this.cards([
+        { num: quality.sessionCount ? formatPercent(quality.interruptionRate) : '暂无数据', lbl: '中断率', compact: true },
+        { num: quality.sessionCount ? formatDuration(quality.averageSessionSeconds) : '暂无数据', lbl: '平均单次会话', compact: true },
       ]));
       return wrap;
     },
@@ -2498,7 +2758,7 @@
           window.alert('导入失败：没有找到合法的观看记录。');
           return;
         }
-        if (!window.confirm('即将导入 ' + valid.length + ' 条记录，与现有数据合并（同一天同一视频保留时长较大者）。确认继续？')) return;
+        if (!window.confirm('即将导入 ' + valid.length + ' 条记录，与现有数据合并（同一天同一视频保留较大时长并合并播放会话）。确认继续？')) return;
         const importedGoal = Number(payload.weeklyGoalSeconds);
         if (Number.isFinite(importedGoal) && importedGoal > 0) GM_setValue(CONFIG.KEYS.WEEKLY_GOAL, Math.round(importedGoal));
 
@@ -2525,6 +2785,7 @@
             cur.playCount = Math.max(Number(cur.playCount) || 1, Number(r.playCount) || 1);
             cur.completed = cur.completed === true || r.completed === true;
             if (r.completedAt && (!cur.completedAt || r.completedAt < cur.completedAt)) cur.completedAt = r.completedAt;
+            cur.sessions = mergeSessions(cur.sessions, r.sessions);
             cur.lastActive = Math.max(Number(cur.lastActive) || 0, Number(r.lastActive) || 0);
             if (!cur.videoTitle && r.videoTitle) cur.videoTitle = r.videoTitle;
             if (!cur.uploader && r.uploader) cur.uploader = r.uploader;
@@ -2752,7 +3013,12 @@
     quality.className = 'bwp-rp-sec bwp-anim';
     quality.style.setProperty('--bwp-i', 7);
     const qh = document.createElement('h4'); qh.textContent = '观看质量'; quality.appendChild(qh);
-    const qt = document.createElement('div'); qt.textContent = '完播率 ' + formatPercent(data.quality.completionRate) + ' · 平均进度 ' + formatPercent(data.quality.averageProgress) + ' · 重复观看 ' + data.quality.repeatWatchCount + ' 次';
+    const qt = document.createElement('div');
+    qt.textContent = '完播率 ' + formatPercent(data.quality.completionRate)
+      + ' · 平均进度 ' + formatPercent(data.quality.averageProgress)
+      + ' · 重复观看 ' + data.quality.repeatWatchCount + ' 次'
+      + ' · 中断率 ' + (data.quality.sessionCount ? formatPercent(data.quality.interruptionRate) : '暂无数据')
+      + ' · 平均单次会话 ' + (data.quality.sessionCount ? formatDuration(data.quality.averageSessionSeconds) : '暂无数据');
     quality.appendChild(qt);
     root.appendChild(quality);
 
@@ -2924,7 +3190,7 @@
     safe(function () {
       Store.initSchema();
       wrapHistory();
-      log('脚本已加载，版本 0.4.0', location.href);
+      log('脚本已加载，版本 0.7.0', location.href);
 
       // 阶段 3：仅视频页启用采集（SPA 路由切换由守护定时器处理）
       safe(function () { ensureCollector(); }, 'ensureCollector');
