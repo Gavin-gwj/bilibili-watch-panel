@@ -1,5 +1,3 @@
-https://github.com/Gavin-gwj/bilibili-watch-panel
-
 # Bilibili Watch Panel · B站个人观看数据面板
 
 ![version](https://img.shields.io/badge/version-0.4.0-fb7299)
