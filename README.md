@@ -1,6 +1,6 @@
 # Bilibili Watch Panel · B站个人观看数据面板
 
-![version](https://img.shields.io/badge/version-0.4.0-fb7299)
+![version](https://img.shields.io/badge/version-0.5.0-fb7299)
 ![Tampermonkey](https://img.shields.io/badge/Tampermonkey-compatible-4a90d9)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
