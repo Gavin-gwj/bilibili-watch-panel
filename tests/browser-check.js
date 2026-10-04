@@ -6,6 +6,10 @@ async (page) => {
   await page.reload();
   await page.getByRole('button',{name:'打开B站观看数据面板'}).click();
   await page.getByRole('button',{name:'本周',exact:true}).click();
+  check(await page.evaluate(async()=>{
+    const info = await testApi.resolveVideoInfo();
+    return info.mediaType==='video' && info.mediaKey==='BV1GJ411x7h7_p2' && info.page===2 && info.partTitle==='第二集';
+  }),'v0.9 多P视频解析出分P mediaKey');
   await page.getByRole('button',{name:'打开设置'}).click();
   await page.getByLabel('主题', {exact:false}).selectOption('dark');
   await page.getByLabel('面板宽度',{exact:true}).last().fill('520');

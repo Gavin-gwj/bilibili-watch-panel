@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili Watch Panel
 // @namespace    https://github.com/Gavin-gwj/bilibili-watch-panel
-// @version      0.8.2
+// @version      0.9.0
 // @description  本地B站观看数据统计与可视化面板
 // @author       Gavin-gwj
 // @match        https://*.bilibili.com/*
@@ -78,7 +78,9 @@
       UI_SETTINGS: 'uiSettings',
     },
     /** 当前数据结构版本 */
-    SCHEMA_VERSION: 3,
+    SCHEMA_VERSION: 4,
+    /** 媒体类型：普通视频 / 番剧 / 课程 */
+    MEDIA_TYPE: { VIDEO: 'video', BANGUMI: 'bangumi', CHEESE: 'cheese' },
     COMPLETION_TOLERANCE_SECONDS: 2,
     COMPLETION_PROGRESS_THRESHOLD: 0.95,
     DEFAULT_WEEKLY_GOAL_SECONDS: 3600,
@@ -269,10 +271,44 @@
     return !!r && typeof r === 'object'
       && typeof r.id === 'string' && r.id.length > 0
       && typeof r.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.date)
-      && typeof r.bvid === 'string' && r.bvid.length > 0
+      && ((typeof r.mediaKey === 'string' && r.mediaKey.length > 0)
+        || (typeof r.bvid === 'string' && r.bvid.length > 0))
       && Number.isFinite(r.watchedSeconds) && r.watchedSeconds >= 0
       && Number.isFinite(r.timestamp)
       && Number.isFinite(r.lastActive);
+  }
+
+  /**
+   * 生成当日唯一键。
+   * - 单 P 视频沿用 bvid，保证旧记录可继续合并
+   * - 多 P 视频追加 _pN
+   * - 番剧用 epN，课程加 cheese_ 前缀避免与番剧冲突
+   */
+  function buildMediaKey(info) {
+    const src = info || {};
+    const type = src.mediaType || CONFIG.MEDIA_TYPE.VIDEO;
+    if (type === CONFIG.MEDIA_TYPE.BANGUMI) return src.epId ? 'ep' + src.epId : '';
+    if (type === CONFIG.MEDIA_TYPE.CHEESE) return src.epId ? 'cheese_ep' + src.epId : '';
+    if (!src.bvid) return '';
+    const page = Math.max(1, Math.floor(Number(src.page) || 1));
+    const pageCount = Math.max(1, Math.floor(Number(src.pageCount) || 1));
+    return pageCount > 1 ? src.bvid + '_p' + page : src.bvid;
+  }
+
+  /** 读取记录的 mediaKey，旧记录回退到 bvid */
+  function mediaKeyOf(record) {
+    if (!record) return '';
+    if (typeof record.mediaKey === 'string' && record.mediaKey) return record.mediaKey;
+    return typeof record.bvid === 'string' ? record.bvid : '';
+  }
+
+  /** 由路径判定媒体类型，非播放页返回空串 */
+  function resolveMediaType(pathname) {
+    const p = String(pathname || '');
+    if (/^\/video\//.test(p)) return CONFIG.MEDIA_TYPE.VIDEO;
+    if (/^\/bangumi\/play\//.test(p)) return CONFIG.MEDIA_TYPE.BANGUMI;
+    if (/^\/cheese\/play\//.test(p)) return CONFIG.MEDIA_TYPE.CHEESE;
+    return '';
   }
 
   /** 清洗单条播放会话；旧记录没有会话时保持空数组，不推断历史数据。 */
@@ -329,7 +365,13 @@
       videoTitle: typeof r.videoTitle === 'string' ? r.videoTitle : '',
       uploader: typeof r.uploader === 'string' ? r.uploader : '',
       uploaderId: typeof r.uploaderId === 'string' ? r.uploaderId : '',
-      bvid: r.bvid,
+      bvid: typeof r.bvid === 'string' ? r.bvid : '',
+      mediaKey: mediaKeyOf(r),
+      mediaType: (r.mediaType === CONFIG.MEDIA_TYPE.BANGUMI || r.mediaType === CONFIG.MEDIA_TYPE.CHEESE)
+        ? r.mediaType : CONFIG.MEDIA_TYPE.VIDEO,
+      page: Number.isFinite(r.page) && r.page > 0 ? Math.floor(r.page) : 1,
+      partTitle: typeof r.partTitle === 'string' ? r.partTitle : '',
+      seasonTitle: typeof r.seasonTitle === 'string' ? r.seasonTitle : '',
       timestamp: r.timestamp,
       watchedSeconds: r.watchedSeconds,
       lastActive: r.lastActive,
@@ -344,6 +386,24 @@
       completedAt: Number.isFinite(r.completedAt) ? r.completedAt : 0,
       sessions: mergeSessions(r.sessions),
     };
+  }
+
+  /** 记录的可读标题：番剧/课程用「季名 · 分集」，多 P 用「视频名 · 分P名」 */
+  function recordDisplayTitle(record) {
+    if (!record) return '未知视频';
+    const base = record.seasonTitle || record.videoTitle || record.bvid || '';
+    const part = record.partTitle && record.partTitle !== base ? record.partTitle : '';
+    if (base && part) return base + ' · ' + part;
+    return base || part || '未知视频';
+  }
+
+  /** 记录的类型标签，普通视频返回空串 */
+  function recordTypeLabel(record) {
+    if (!record) return '';
+    if (record.mediaType === CONFIG.MEDIA_TYPE.BANGUMI) return '番剧';
+    if (record.mediaType === CONFIG.MEDIA_TYPE.CHEESE) return '课程';
+    if (Number(record.page) > 1) return 'P' + record.page;
+    return '';
   }
 
   const DEFAULT_UI_SETTINGS = Object.freeze({
@@ -383,7 +443,7 @@
         if (Date.now() - result.scannedAt > 100) break;
         const r = raw[scanned];
         if (!isValidRecord(r)) { invalid++; continue; }
-        const key = r.date + '\0' + r.bvid;
+        const key = r.date + '\0' + mediaKeyOf(r);
         groups.set(key, (groups.get(key) || 0) + 1);
         for (const field of ['durationSeconds', 'maxPositionSeconds']) {
           if (Object.prototype.hasOwnProperty.call(r, field) && (!Number.isFinite(r[field]) || r[field] < 0)) numeric++;
@@ -553,6 +613,12 @@
     return m ? m[1] : '';
   }
 
+  /** 从番剧 / 课程 URL 解析 ep 号（SSR 解析失败时的兜底） */
+  function parseEpId(url) {
+    const m = String(url || location.href).match(/\/play\/ep(\d+)/i);
+    return m ? m[1] : '';
+  }
+
   /** 解析 B 站 up 主空间链接里的 mid */
   function parseMidFromHref(href) {
     const m = String(href || '').match(/space\.bilibili\.com\/(\d+)/);
@@ -567,15 +633,143 @@
       const vd = s.videoData || s.videoInfo || null;
       const up = s.upData || s.upInfo || null;
       if (!vd && !up) return null;
+      const pages = vd && Array.isArray(vd.pages) ? vd.pages : [];
+      const pageCount = pages.length || Math.max(1, Number(vd && vd.videos) || 1);
+      const currentPage = Math.max(1, Number(s.p) || 1);
+      const pageInfo = pages.filter(function (item) {
+        return item && Number(item.page) === currentPage;
+      })[0] || null;
       return {
         videoId: vd && (vd.aid || vd.avid) ? String(vd.aid || vd.avid) : '',
         bvid: vd && vd.bvid ? String(vd.bvid) : '',
         videoTitle: vd && (vd.title || vd.videoTitle) ? String(vd.title || vd.videoTitle) : '',
         uploader: up && (up.name || up.uname) ? String(up.name || up.uname) : '',
         uploaderId: up && (up.mid || up.uid) ? String(up.mid || up.uid) : '',
+        seasonTitle: '',
+        partTitle: pageInfo && pageInfo.part ? String(pageInfo.part) : '',
+        page: currentPage,
+        pageCount: pageCount,
+        durationSeconds: Number(pageInfo && pageInfo.duration) || Number(vd && vd.duration) || 0,
+        mediaType: CONFIG.MEDIA_TYPE.VIDEO,
       };
     } catch (err) {
       logError('readInitialState', err);
+      return null;
+    }
+  }
+
+  /** 在脚本文本中截取「= { ... }」的完整 JSON 对象，容忍括号出现在字符串里 */
+  function sliceBalancedJson(text, fromIndex) {
+    const start = String(text || '').indexOf('{', fromIndex);
+    if (start < 0) return null;
+    let depth = 0;
+    let inStr = false;
+    let escaped = false;
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (inStr) {
+        if (escaped) escaped = false;
+        else if (ch === '\\') escaped = true;
+        else if (ch === '"') inStr = false;
+        continue;
+      }
+      if (ch === '"') { inStr = true; continue; }
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) return text.slice(start, i + 1);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 解析番剧页内联脚本 `const playurlSSRData = {...}`。
+   * 只读页面已加载的数据，不发请求；失败返回 null。
+   */
+  function parseBangumiHydrate(text) {
+    try {
+      const src = String(text || '');
+      const anchor = src.indexOf('playurlSSRData');
+      if (anchor < 0) return null;
+      const json = sliceBalancedJson(src, anchor);
+      if (!json) return null;
+      const data = JSON.parse(json);
+      const result = data && data.data && data.data.result ? data.data.result : null;
+      if (!result) return null;
+      const info = result.video_info || {};
+      const arc = result.arc || {};
+      const ep = (result.supplement && result.supplement.ogv_episode_info) || {};
+      const season = (result.supplement && result.supplement.ogv_season_info) || {};
+      const dashDuration = info.dash && Number(info.dash.duration);
+      const durationSeconds = Number.isFinite(dashDuration) && dashDuration > 0
+        ? dashDuration : Math.round((Number(info.timelength) || 0) / 1000);
+      if (!ep.episode_id && !arc.bvid) return null;
+      return {
+        videoId: arc.aid ? String(arc.aid) : '',
+        bvid: arc.bvid ? String(arc.bvid) : '',
+        videoTitle: ep.long_title ? String(ep.long_title) : '',
+        uploader: '',
+        uploaderId: '',
+        seasonTitle: season.season_id ? '番剧 ' + season.season_id : '',
+        partTitle: ep.long_title ? String(ep.long_title) : '',
+        page: Math.max(1, Number(ep.index_title) || 1),
+        pageCount: 1,
+        epId: ep.episode_id ? String(ep.episode_id) : '',
+        durationSeconds: durationSeconds,
+        mediaType: CONFIG.MEDIA_TYPE.BANGUMI,
+      };
+    } catch (err) {
+      logError('parseBangumiHydrate', err);
+      return null;
+    }
+  }
+
+  /**
+   * 解析课程页 `window.__EduPlayPiniaState__`（值是 JSON 字符串）。
+   * 只读页面已加载的数据，不发请求；失败返回 null。
+   */
+  function parseCheeseState(text) {
+    try {
+      const src = String(text || '');
+      const anchor = src.indexOf('__EduPlayPiniaState__');
+      if (anchor < 0) return null;
+      const quoteStart = src.indexOf('"', anchor);
+      if (quoteStart < 0) return null;
+      let j = quoteStart + 1;
+      let literal = '';
+      while (j < src.length) {
+        const ch = src[j];
+        if (ch === '\\') { literal += ch + (src[j + 1] || ''); j += 2; continue; }
+        if (ch === '"') break;
+        literal += ch;
+        j++;
+      }
+      if (!literal) return null;
+      const outer = JSON.parse('"' + literal + '"');
+      const state = JSON.parse(outer);
+      const index = state && state.index ? state.index : null;
+      if (!index) return null;
+      const view = index.viewInfo || {};
+      const ep = index.currentEp || {};
+      const up = view.up_info || {};
+      if (!ep.id && !ep.aid) return null;
+      return {
+        videoId: ep.aid ? String(ep.aid) : '',
+        bvid: '',
+        videoTitle: ep.title ? String(ep.title) : '',
+        uploader: up.uname ? String(up.uname) : '',
+        uploaderId: up.mid ? String(up.mid) : '',
+        seasonTitle: view.title ? String(view.title) : '',
+        partTitle: ep.title ? String(ep.title) : '',
+        page: Math.max(1, Number(ep.index) || 1),
+        pageCount: Math.max(1, Number(view.ep_count) || 1),
+        epId: ep.id ? String(ep.id) : '',
+        durationSeconds: Number(ep.duration) || 0,
+        mediaType: CONFIG.MEDIA_TYPE.CHEESE,
+      };
+    } catch (err) {
+      logError('parseCheeseState', err);
       return null;
     }
   }
@@ -670,8 +864,44 @@
   function resolveVideoInfo() {
     const urlBvid = parseBvid(location.href);
     const urlAid = parseAid(location.href);
+    const mediaType = resolveMediaType(location.pathname);
 
-    let info = { videoId: urlAid, bvid: urlBvid, videoTitle: '', uploader: '', uploaderId: '', durationSeconds: 0 };
+    let info = {
+      videoId: urlAid, bvid: urlBvid, videoTitle: '', uploader: '', uploaderId: '',
+      seasonTitle: '', partTitle: '', page: 1, pageCount: 1, epId: '',
+      durationSeconds: 0, mediaType: mediaType || CONFIG.MEDIA_TYPE.VIDEO,
+    };
+
+    // 番剧页：数据在 playurlSSRData 内联脚本，页面无 __INITIAL_STATE__
+    if (mediaType === CONFIG.MEDIA_TYPE.BANGUMI) {
+      const parsed = parseBangumiHydrate(document.documentElement ? document.documentElement.innerHTML : '');
+      if (parsed) {
+        info = Object.assign(info, parsed);
+        info.videoTitle = parsed.videoTitle || cleanDocumentTitle(document.title);
+        info.mediaKey = buildMediaKey(info);
+        return Promise.resolve(info);
+      }
+      // SSR 解析失败时用 URL 里的 ep 号兜底，仍可记录时长
+      info.epId = parseEpId(location.href);
+      info.mediaKey = buildMediaKey(info);
+      info.videoTitle = cleanDocumentTitle(document.title);
+      return Promise.resolve(info);
+    }
+
+    // 课程页：数据在 window.__EduPlayPiniaState__ 的 JSON 字符串里
+    if (mediaType === CONFIG.MEDIA_TYPE.CHEESE) {
+      const parsed = parseCheeseState(document.documentElement ? document.documentElement.innerHTML : '');
+      if (parsed) {
+        info = Object.assign(info, parsed);
+        info.videoTitle = parsed.videoTitle || cleanDocumentTitle(document.title);
+        info.mediaKey = buildMediaKey(info);
+        return Promise.resolve(info);
+      }
+      info.epId = parseEpId(location.href);
+      info.mediaKey = buildMediaKey(info);
+      info.videoTitle = cleanDocumentTitle(document.title);
+      return Promise.resolve(info);
+    }
 
     const init = readInitialState();
     if (init) {
@@ -680,6 +910,11 @@
       info.videoTitle = init.videoTitle || info.videoTitle;
       info.uploader = init.uploader || info.uploader;
       info.uploaderId = init.uploaderId || info.uploaderId;
+      info.seasonTitle = init.seasonTitle || info.seasonTitle;
+      info.partTitle = init.partTitle || info.partTitle;
+      info.page = init.page || info.page;
+      info.pageCount = init.pageCount || info.pageCount;
+      info.durationSeconds = init.durationSeconds || info.durationSeconds;
     }
 
     const dom = readFromDom();
@@ -687,6 +922,7 @@
     info.uploader = info.uploader || dom.uploader || '';
     info.uploaderId = info.uploaderId || dom.uploaderId || '';
     info.bvid = info.bvid || urlBvid;
+    info.mediaKey = buildMediaKey(info);
 
     // 缓存命中优先补齐
     const cached = VideoCache.get(info.bvid);
@@ -723,6 +959,7 @@
     }
 
     if (info.bvid) VideoCache.set(info.bvid, info);
+    info.mediaKey = buildMediaKey(info);
     return Promise.resolve(info);
   }
 
@@ -761,7 +998,12 @@
 
     /** 判断当前是否为视频详情页 */
     isVideoPage() {
-      return /^\/video\//.test(location.pathname);
+      return !!resolveMediaType(location.pathname);
+    },
+
+    /** 当前页面媒体类型 */
+    mediaType() {
+      return resolveMediaType(location.pathname) || CONFIG.MEDIA_TYPE.VIDEO;
     },
 
     /** 启动采集（幂等） */
@@ -967,12 +1209,12 @@
 
     /** 记录一次"打开"：同天同视频 openCount +1 */
     recordOpen() {
-      if (!this.videoInfo || !this.videoInfo.bvid) return;
+      if (!this.videoInfo || !this.videoInfo.mediaKey) return;
       const firstSession = !this.opened;
       this.opened = true;
       const date = todayStr();
       const records = Store.getRecords();
-      const idx = findRecordIndex(records, date, this.videoInfo.bvid);
+      const idx = findRecordIndex(records, date, this.videoInfo.mediaKey);
       if (idx >= 0) {
         records[idx].openCount = (Number(records[idx].openCount) || 1) + 1;
         records[idx].playCount = Math.max(1, Math.floor(Number(records[idx].playCount) || 1)) + (firstSession ? 1 : 0);
@@ -982,15 +1224,22 @@
         if (this.videoInfo.uploader) records[idx].uploader = this.videoInfo.uploader;
         if (this.videoInfo.uploaderId) records[idx].uploaderId = this.videoInfo.uploaderId;
         if (this.videoInfo.videoId) records[idx].videoId = this.videoInfo.videoId;
+        if (this.videoInfo.partTitle) records[idx].partTitle = this.videoInfo.partTitle;
+        if (this.videoInfo.seasonTitle) records[idx].seasonTitle = this.videoInfo.seasonTitle;
       } else {
         records.push({
-          id: date + '_' + this.videoInfo.bvid,
+          id: date + '_' + this.videoInfo.mediaKey,
           date: date,
           videoId: this.videoInfo.videoId || '',
           videoTitle: this.videoInfo.videoTitle || '',
           uploader: this.videoInfo.uploader || '',
           uploaderId: this.videoInfo.uploaderId || '',
-          bvid: this.videoInfo.bvid,
+          bvid: this.videoInfo.bvid || '',
+          mediaKey: this.videoInfo.mediaKey,
+          mediaType: this.videoInfo.mediaType || CONFIG.MEDIA_TYPE.VIDEO,
+          page: Number(this.videoInfo.page) || 1,
+          partTitle: this.videoInfo.partTitle || '',
+          seasonTitle: this.videoInfo.seasonTitle || '',
           timestamp: Date.now(),
           watchedSeconds: 0,
           lastActive: Date.now(),
@@ -1004,15 +1253,15 @@
         });
       }
       Store.setRecords(records);
-      log('已记录打开', date, this.videoInfo.bvid);
+      log('已记录打开', date, this.videoInfo.mediaKey);
     },
 
     /** 记录一次从暂停到播放的有效播放会话。 */
     recordPlaySession() {
-      if (!this.videoInfo || !this.videoInfo.bvid) return;
+      if (!this.videoInfo || !this.videoInfo.mediaKey) return;
       const date = todayStr();
       const records = Store.getRecords();
-      const idx = findRecordIndex(records, date, this.videoInfo.bvid);
+      const idx = findRecordIndex(records, date, this.videoInfo.mediaKey);
       if (!this.opened || idx < 0) {
         this.recordOpen();
         return;
@@ -1029,7 +1278,7 @@
     },
 
     markCompleted(at) {
-      if (!this.videoInfo || !this.videoInfo.bvid || this.pendingCompleted) return;
+      if (!this.videoInfo || !this.videoInfo.mediaKey || this.pendingCompleted) return;
       this.pendingCompleted = true;
       this.pendingCompletedAt = Number(at) || Date.now();
     },
@@ -1112,7 +1361,7 @@
     /** 结算并写入存储；saveThrottle 为 true 时受节流限制 */
     flush(force) {
       if (!this.active && !this.pendingSeconds && !this.pendingSession) return;
-      if (!this.videoInfo || !this.videoInfo.bvid) return;
+      if (!this.videoInfo || !this.videoInfo.mediaKey) return;
       if (this.pendingSeconds <= 0 && this.pendingMaxPosition <= 0 && !this.pendingCompleted && !this.pendingSession) return;
       const now = Date.now();
       if (!force && now - this.lastSaveAt < CONFIG.SAVE_THROTTLE_MS) return;
@@ -1145,10 +1394,11 @@
     },
   };
 
-  /** 在记录数组中查找「日期 + bvid」的位置 */
-  function findRecordIndex(records, date, bvid) {
+  /** 在记录数组中查找「日期 + mediaKey」的位置，旧记录回退到 bvid */
+  function findRecordIndex(records, date, mediaKey) {
+    const key = String(mediaKey || '');
     for (let i = 0; i < records.length; i++) {
-      if (records[i].date === date && records[i].bvid === bvid) return i;
+      if (records[i].date === date && mediaKeyOf(records[i]) === key) return i;
     }
     return -1;
   }
@@ -1158,7 +1408,7 @@
    * 跨零点时按当天边界拆分，保证两天各记一条。
    */
   function mergeWatchedSeconds(info, seconds, endAt, maxPosition, completed, completedAt, session) {
-    if (!info || !info.bvid || (!(seconds > 0) && !(maxPosition > 0) && !completed && !session)) return;
+    if (!info || !info.mediaKey || (!(seconds > 0) && !(maxPosition > 0) && !completed && !session)) return;
     const end = new Date(endAt);
     const startAt = endAt - seconds * 1000;
     const start = new Date(startAt);
@@ -1179,7 +1429,7 @@
   /** 单日单条记录秒数累加（同天同视频合并） */
   function applySeconds(date, info, seconds, activeAt, maxPosition, completed, completedAt, session) {
     const records = Store.getRecords();
-    const idx = findRecordIndex(records, date, info.bvid);
+    const idx = findRecordIndex(records, date, info.mediaKey);
     if (idx >= 0) {
       records[idx].watchedSeconds = (Number(records[idx].watchedSeconds) || 0) + seconds;
       records[idx].durationSeconds = Math.max(Number(records[idx].durationSeconds) || 0, Number(info.durationSeconds) || 0);
@@ -1193,17 +1443,24 @@
       if (info.uploader) records[idx].uploader = info.uploader;
       if (info.uploaderId) records[idx].uploaderId = info.uploaderId;
       if (info.videoId) records[idx].videoId = info.videoId;
+      if (info.partTitle) records[idx].partTitle = info.partTitle;
+      if (info.seasonTitle) records[idx].seasonTitle = info.seasonTitle;
       if (!Number.isFinite(records[idx].openCount) || records[idx].openCount < 1) records[idx].openCount = 1;
       records[idx].sessions = mergeSessions(records[idx].sessions, session ? [session] : []);
     } else {
       records.push({
-        id: date + '_' + info.bvid,
+        id: date + '_' + info.mediaKey,
         date: date,
         videoId: info.videoId || '',
         videoTitle: info.videoTitle || '',
         uploader: info.uploader || '',
         uploaderId: info.uploaderId || '',
-        bvid: info.bvid,
+        bvid: info.bvid || '',
+        mediaKey: info.mediaKey,
+        mediaType: info.mediaType || CONFIG.MEDIA_TYPE.VIDEO,
+        page: Number(info.page) || 1,
+        partTitle: info.partTitle || '',
+        seasonTitle: info.seasonTitle || '',
         timestamp: activeAt,
         watchedSeconds: seconds,
         lastActive: activeAt,
@@ -1217,7 +1474,7 @@
       });
     }
     Store.setRecords(records);
-    log('已写入观看数据', date, info.bvid, seconds.toFixed(1) + 's');
+    log('已写入观看数据', date, info.mediaKey, seconds.toFixed(1) + 's');
     // 容量控制：达到阈值时归档旧记录，保持面板与存储轻量
     if (records.length > CONFIG.ARCHIVE_THRESHOLD) archiveIfNeeded();
   }
@@ -1324,10 +1581,11 @@
       const list = records || [];
       const byVideo = Object.create(null);
       list.forEach(function (r) {
-        if (!r || !r.bvid) return;
+        const key = mediaKeyOf(r);
+        if (!key) return;
         const sec = Number(r.watchedSeconds) || 0;
-        if (!byVideo[r.bvid]) byVideo[r.bvid] = { seconds: 0 };
-        byVideo[r.bvid].seconds += Math.max(0, sec);
+        if (!byVideo[key]) byVideo[key] = { seconds: 0 };
+        byVideo[key].seconds += Math.max(0, sec);
       });
       const keys = Object.keys(byVideo);
       return keys.length ? keys.reduce(function (sum, k) { return sum + byVideo[k].seconds; }, 0) / keys.length : null;
@@ -1364,9 +1622,10 @@
       if (opts.dedupeByBvid) {
         const map = Object.create(null);
         list.forEach(function (r) {
-          if (!r || !r.bvid) return;
-          const cur = map[r.bvid];
-          if (!cur) { map[r.bvid] = Object.assign({}, r); return; }
+          const key = mediaKeyOf(r);
+          if (!key) return;
+          const cur = map[key];
+          if (!cur) { map[key] = Object.assign({}, r); return; }
           cur.watchedSeconds = (Number(cur.watchedSeconds) || 0) + (Number(r.watchedSeconds) || 0);
           cur.maxPositionSeconds = Math.max(Number(cur.maxPositionSeconds) || 0, Number(r.maxPositionSeconds) || 0);
           cur.durationSeconds = Math.max(Number(cur.durationSeconds) || 0, Number(r.durationSeconds) || 0);
@@ -1385,7 +1644,7 @@
         completionRate: Stats.completionRate(list),
         averageProgress: progress.length ? progress.reduce(function (a, v) { return a + v; }, 0) / progress.length : null,
         totalWatchedSeconds: sumSeconds(list),
-        distinctVideoCount: new Set(list.map(function (r) { return r && r.bvid; }).filter(Boolean)).size,
+        distinctVideoCount: new Set(list.map(mediaKeyOf).filter(Boolean)).size,
         averageVideoDuration: Stats.averageVideoDuration(list),
         repeatWatchCount: Stats.repeatWatchCount(list),
         recordsWithoutDuration: list.filter(function (r) { return Stats.recordProgress(r) === null; }).length,
@@ -2409,11 +2668,12 @@
       const body = document.createElement('div');
       body.className = 'bwp-detail-body';
       const title = document.createElement('h3');
-      title.textContent = record.videoTitle || record.bvid || '未知视频';
+      title.textContent = recordDisplayTitle(record);
       body.appendChild(title);
       const meta = document.createElement('p');
       meta.className = 'bwp-detail-meta';
-      meta.textContent = (record.uploader || '未知UP主') + ' · ' + record.date;
+      const typeLabel = recordTypeLabel(record);
+      meta.textContent = (typeLabel ? typeLabel + ' · ' : '') + (record.uploader || '未知UP主') + ' · ' + record.date;
       body.appendChild(meta);
 
       const sessions = Stats.sessionStats([record]);
@@ -2437,7 +2697,7 @@
         ['暂停次数', String(sessions.pauseCount)],
         ['切后台次数', String(sessions.backgroundCount)],
         ['跳转次数', String(sessions.seekCount)],
-        ['BV 号', record.bvid || '—'],
+        ['编号', record.bvid || record.mediaKey || '—'],
       ];
       values.forEach(function (entry) {
         const cell = document.createElement('div');
@@ -2633,7 +2893,7 @@
         item.style.setProperty('--bwp-i', Math.min(i, 8));
         const t = document.createElement('div');
         t.className = 't';
-        t.textContent = r.videoTitle || r.bvid || '未知视频';
+        t.textContent = recordDisplayTitle(r);
         const m = document.createElement('div');
         m.className = 'm';
         const left = document.createElement('span');
@@ -2644,6 +2904,13 @@
         const tags = document.createElement('div');
         tags.className = 'bwp-tags';
         const progress = Stats.recordProgress(r);
+        const typeLabel = recordTypeLabel(r);
+        if (typeLabel) {
+          const tagType = document.createElement('span');
+          tagType.className = 'bwp-tag';
+          tagType.textContent = typeLabel;
+          tags.appendChild(tagType);
+        }
         const tagP = document.createElement('span');
         tagP.className = 'bwp-tag pink';
         tagP.textContent = '进度 ' + formatPercent(progress);
@@ -2836,7 +3103,7 @@
         item.style.setProperty('--bwp-i', Math.min(i, 8));
         const t = document.createElement('div');
         t.className = 't';
-        t.textContent = r.videoTitle || r.bvid || '未知视频';
+        t.textContent = recordDisplayTitle(r);
         const m = document.createElement('div');
         m.className = 'm';
         const left = document.createElement('span');
@@ -2847,6 +3114,13 @@
         const tags = document.createElement('div');
         tags.className = 'bwp-tags';
         const progress = Stats.recordProgress(r);
+        const typeLabel = recordTypeLabel(r);
+        if (typeLabel) {
+          const tagType = document.createElement('span');
+          tagType.className = 'bwp-tag';
+          tagType.textContent = typeLabel;
+          tags.appendChild(tagType);
+        }
         const tagP = document.createElement('span');
         tagP.className = 'bwp-tag pink';
         tagP.textContent = '进度 ' + formatPercent(progress);
@@ -3135,10 +3409,10 @@
 
         const merged = Store.getRecords();
         const index = Object.create(null);
-        merged.forEach(function (r, i) { index[r.date + '|' + r.bvid] = i; });
+        merged.forEach(function (r, i) { index[r.date + '|' + mediaKeyOf(r)] = i; });
         let added = 0, updated = 0;
         valid.forEach(function (r) {
-          const key = r.date + '|' + r.bvid;
+          const key = r.date + '|' + mediaKeyOf(r);
           const i = index[key];
           if (i === undefined) {
             merged.push(r);
@@ -3572,7 +3846,7 @@
     safe(function () {
       Store.initSchema();
       wrapHistory();
-      log('脚本已加载，版本 0.8.2', location.href);
+      log('脚本已加载，版本 0.9.0', location.href);
 
       // 阶段 3：仅视频页启用采集（SPA 路由切换由守护定时器处理）
       safe(function () { ensureCollector(); }, 'ensureCollector');

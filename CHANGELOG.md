@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.9.0] - 2026-10-04
+
+### Added
+
+- 采集范围扩展到番剧 `/bangumi/play/ep*` 与课程 `/cheese/play/ep*`：番剧读取 `playurlSSRData`，课程读取 `__EduPlayPiniaState__`，均只读页面已加载数据，不新增请求。
+- 新增分 P / 分集识别：多 P 视频每个分 P 独立成条，进度与完播互不干扰。
+- 记录新增 `mediaKey` / `mediaType` / `page` / `partTitle` / `seasonTitle` 字段，列表与详情显示番剧、课程与分 P 标签。
+
+### Changed
+
+- schema 升级到 v4：唯一键从 `date + bvid` 改为 `date + mediaKey`，旧记录读取时自动补齐字段，不重写用户数据。
+- 单 P 视频的 `mediaKey` 与旧 `bvid` 完全一致，历史记录合并结果不变。
+- JSON 导入去重与健康检查重复检测同步改用 `mediaKey`。
+
+### Validation
+
+- 新增 12 项 v0.9 Node 逻辑测试（媒体 key、旧记录迁移、番剧/课程解析、分 P 分条、统计去重），合计 32 项 Node 测试全部通过。
+- Chrome 隔离页面断言在视频页通过 43 项；番剧页、课程页解析已单独验证。
+- `node --check` 与 `git diff --check` 通过；未新增权限、依赖或外部请求。
+
 ## [0.8.2] - 2026-10-04
 
 ### Fixed

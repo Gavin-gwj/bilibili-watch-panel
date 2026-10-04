@@ -5,9 +5,24 @@ const path = require('node:path');
 const sourcePath = path.join(__dirname, '..', 'bilibili-watch-panel.user.js');
 http.createServer((req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  const source = fs.readFileSync(sourcePath, 'utf8').replace("  if (document.readyState === 'loading') {", "  window.testApi = { CONFIG, Store, Panel, maybeShowWeeklyReminder };\n  if (document.readyState === 'loading') {");
-  res.end(`<!doctype html><html><head><meta charset="utf-8"><title>v0.8 隔离验收</title></head><body>
-  <h1>v0.8 合成数据测试页</h1><input aria-label="页面输入框"><div contenteditable="true">可编辑区域</div>
+  const source = fs.readFileSync(sourcePath, 'utf8').replace("  if (document.readyState === 'loading') {", "  window.testApi = { CONFIG, Store, Panel, Stats, Collector, buildMediaKey, sanitizeRecord, resolveVideoInfo, maybeShowWeeklyReminder };\n  if (document.readyState === 'loading') {");
+  const url = new URL(req.url, 'http://127.0.0.1:18768');
+  const pathname = url.pathname;
+  let pageKind = 'video';
+  let prelude = '';
+  if (/^\/bangumi\/play\//.test(pathname)) {
+    pageKind = 'bangumi';
+    const bangumiJson = '{"status":200,"data":{"result":{"video_info":{"timelength":1493182,"dash":{"duration":1494}},"arc":{"aid":710444604,"cid":26835486927,"bvid":"BV1PQ4y1N7V8"},"supplement":{"ogv_episode_info":{"episode_id":321808,"index_title":"1","long_title":"云霄飞车杀人事件"},"ogv_season_info":{"season_id":33378}}}}}';
+    prelude = '<script>const playurlSSRData = ' + bangumiJson + ';window.__PLAYURL_HYDRATE_DATA__=' + bangumiJson + ';</script>';
+  } else if (/^\/cheese\/play\//.test(pathname)) {
+    pageKind = 'cheese';
+    prelude = '<script>window.__EduPlayPiniaState__="' + JSON.stringify(JSON.stringify({ index: { viewInfo: { title: '斯坦福大学《人生设计课》读书会', season_id: 37081, ep_count: 31, up_info: { mid: 404801960, uname: '我是宋超' } }, currentEp: { id: 1209625, aid: 113407537710579, cid: 26565414318, duration: 681, title: '第六节｜设计思维的5种基本心态', index: 6 } } })).slice(1, -1) + '";</script>';
+  } else {
+    pageKind = 'video';
+    prelude = '<script>window.__INITIAL_STATE__={"p":2,"videoData":{"aid":80433022,"bvid":"BV1GJ411x7h7","title":"合成多P视频","duration":213,"videos":3,"pages":[{"page":1,"part":"第一集","duration":100},{"page":2,"part":"第二集","duration":110},{"page":3,"part":"第三集","duration":120}]},"upData":{"mid":486906719,"name":"示例UP"}};</script>';
+  }
+  res.end(`<!doctype html><html><head><meta charset="utf-8"><title>v0.9 隔离验收 · ${pageKind}</title>${prelude}</head><body>
+  <h1>v0.9 合成数据测试页（${pageKind}）</h1><video></video><input aria-label="页面输入框"><div contenteditable="true">可编辑区域</div>
   <script>
   window.testWrites=[]; window.failWrite=false; window.failRead='';
   window.GM_getValue=(key,fallback)=>{if(window.failRead===key)throw Error('read denied');const raw=localStorage.getItem(key);return raw===null?fallback:JSON.parse(raw);};

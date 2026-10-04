@@ -102,7 +102,7 @@ test('关闭周提醒不读取/写入提醒周', () => {
 });
 test('旧记录清洗与会话重复导入兼容', () => {
   assert.ok(sanitizeRecord(record())); const session={startAt:1,endAt:2,endReason:'pause'};
-  assert.equal(mergeSessions([session],[session]).length,1); assert.equal(CONFIG.SCHEMA_VERSION,3);
+  assert.equal(mergeSessions([session],[session]).length,1); assert.equal(CONFIG.SCHEMA_VERSION,4);
 });
 test('慢速播放按墙钟时间计时，不按视频进度缩水', () => {
   assert.equal(activeWatchSeconds(5000, 0, 0, 2.5), 5);
@@ -124,6 +124,6 @@ test('近30天统计只读取一次主记录', () => {
 test('用户脚本不增加权限或外部依赖', () => {
   const cp=require('node:child_process'); const base=cp.execFileSync('git',['show','HEAD:bilibili-watch-panel.user.js'],{encoding:'utf8',cwd:path.join(__dirname,'..')});
   const meta=s=>s.split(/\r?\n/).filter(l=>/^\/\/ @(grant|require|match)\s/.test(l)); assert.deepEqual(meta(source),meta(base));
-  assert.match(source,/@version\s+0\.8\.2/);
+  assert.match(source,/@version\s+0\.9\.0/);
 });
 console.log(`\n${checks} tests passed`);

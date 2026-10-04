@@ -6,23 +6,32 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.8.2"><img src="https://img.shields.io/badge/version-0.8.2-fb7299" alt="version"></a>
+  <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.9.0"><img src="https://img.shields.io/badge/version-0.9.0-fb7299" alt="version"></a>
   <img src="https://img.shields.io/badge/Tampermonkey-compatible-4a90d9" alt="Tampermonkey compatible">
   <img src="https://img.shields.io/badge/storage-local--only-6c757d" alt="local only">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license">
 </p>
 
 <p align="center">
-  <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.8.2">下载 v0.8.2</a> ·
+  <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.9.0">下载 v0.9.0</a> ·
   <a href="./bilibili-watch-panel.user.js">查看用户脚本</a> ·
   <a href="./CHANGELOG.md">版本记录</a>
 </p>
 
 ---
 
+## v0.9.0 采集范围扩展与分P识别
+
+> 当前版本为 **0.9.0**，于 2026-10-04 发布。32 项逻辑测试、43 项隔离浏览器断言已通过；升级前建议先导出 JSON。
+
+- 采集范围扩展到番剧 `/bangumi/play/ep*` 与课程 `/cheese/play/ep*`，番剧和课程时长不再漏记。
+- 多 P 视频每个分 P 独立统计，进度与完播互不干扰。
+- 观看记录新增「番剧 / 课程 / P2」类型标签，详情抽屉显示分 P 与剧集标题。
+- schema 升级到 v4；旧记录读取时自动补齐字段，单 P 视频的合并口径与历史数据完全一致。
+
 ## v0.8.2 计时口径与性能修复
 
-> 当前版本为 **0.8.2**，于 2026-10-04 发布。20 项逻辑测试、42 项隔离浏览器断言已通过；升级前建议先导出 JSON。
+> 发布于 2026-10-04。20 项逻辑测试、42 项隔离浏览器断言已通过。
 
 - 修复慢速播放（0.5x / 0.75x 等）观看时长被按视频进度少算的问题，时长现在按实际播放的墙钟秒数累计。
 - 修复近 30 天范围下每日完播率、每日平均观看进度图表重复读取全部记录造成的卡顿。
@@ -45,8 +54,8 @@
 
 Bilibili Watch Panel 是一个**纯本地运行的 Tampermonkey 用户脚本**。它把分散在 B 站观看过程中的信息，整理成一个轻量的侧边数据面板：
 
-- 看了多久：今日、本周、全部累计时长
-- 看了什么：视频数量、观看记录、近一年观看热力图
+- 看了多久：今日、本周、全部累计时长（含番剧、课程）
+- 看了什么：视频数量、分 P / 分集记录、近一年观看热力图
 - 看谁的：UP 主排行、观看次数与时长占比
 - 看得怎么样：完播率、平均进度、重复观看和有效观看时长
 - 怎么变化：播放会话、中断率、每日趋势与本周报告
@@ -163,7 +172,7 @@ B站页面公开信息
 4. 安装完成后打开任意 B 站页面，点击右侧粉色浮动按钮。
 5. 在视频页播放视频后，面板会开始记录观看数据。
 
-也可以直接从 [v0.8.2 Release](./bilibili-watch-panel.user.js) 下载脚本。
+也可以直接从 [v0.9.0 Release](./bilibili-watch-panel.user.js) 下载脚本。
 
 ## 隐私与合规
 
@@ -188,6 +197,7 @@ B站页面公开信息
 
 ## 版本
 
+- **v0.9.0**：扩展番剧与课程采集，新增分 P 识别与 schema v4。
 - **v0.8.2**：修复慢速播放时长少算与近 30 天图表重复读取记录的问题。
 - **v0.8.1**：优化本周页时间范围与每周目标控件，补充分组与输入语义。
 - **v0.8.0**：新增设置视图、主题、健康检查与快捷键等体验增强。
