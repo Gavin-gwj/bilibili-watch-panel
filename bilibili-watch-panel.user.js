@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili Watch Panel
 // @namespace    https://github.com/Gavin-gwj/bilibili-watch-panel
-// @version      0.8.1
+// @version      0.8.2
 // @description  本地B站观看数据统计与可视化面板
 // @author       Gavin-gwj
 // @match        https://*.bilibili.com/*
@@ -310,6 +310,13 @@
     }
     return Object.keys(map).map(function (key) { return map[key]; })
       .sort(function (a, b) { return a.startAt - b.startAt; });
+  }
+
+  /** 只要播放进度真实推进，就按播放期间的墙钟时间计时。 */
+  function activeWatchSeconds(now, lastTickAt, lastCurrentTime, currentTime) {
+    if (!Number.isFinite(lastCurrentTime) || !Number.isFinite(currentTime) || currentTime <= lastCurrentTime) return 0;
+    const elapsed = Math.max(0, (Number(now) - Number(lastTickAt)) / 1000);
+    return Math.min(elapsed, CONFIG.MAX_TICK_SECONDS);
   }
 
   /** 清洗单条记录，坏数据返回 null */
@@ -1035,10 +1042,7 @@
       this.videoEl = video;
       if (this.canAccumulate && video && !this._buffering) {
         this.updateDuration(video);
-        const ctDelta = Number.isFinite(this._lastCurrentTime) && Number.isFinite(video.currentTime)
-          ? Math.max(0, video.currentTime - this._lastCurrentTime)
-          : 0;
-        const delta = Math.min(ctDelta, CONFIG.HEARTBEAT_MS / 1000, CONFIG.MAX_TICK_SECONDS);
+        const delta = activeWatchSeconds(now, this.lastTickAt, this._lastCurrentTime, video.currentTime);
         if (delta > 0) {
           this.pendingSeconds += delta;
           if (this.currentSession) this.currentSession.watchedSeconds += delta;
@@ -1085,8 +1089,7 @@
           }
           return;
         }
-        const ctDelta = Math.max(0, video.currentTime - this._lastCurrentTime);
-        const delta = Math.min(ctDelta, CONFIG.HEARTBEAT_MS / 1000, CONFIG.MAX_TICK_SECONDS);
+        const delta = activeWatchSeconds(now, this.lastTickAt, this._lastCurrentTime, video.currentTime);
         this.lastTickAt = now;
         this.beginSession();
         if (!this.playCountedForCurrentPlay) {
@@ -2742,14 +2745,14 @@
       this.el.body.appendChild(this.chartBox('weekCompletion'));
       this.makeChart('weekCompletion', {
         type: 'line',
-        data: { labels: data.daily.map(function (d) { return d.label; }), datasets: [{ label: '完播率', data: data.daily.map(function (d) { return Stats.completionRate(Store.getRecords().filter(function (r) { return r.date === d.date; })); }).map(function (v) { return v === null ? null : Math.round(v * 100); }), borderColor: CHART_COLORS[2], backgroundColor: 'rgba(224,92,130,.12)', fill: true, tension: .35, pointRadius: 3 }] },
+        data: { labels: data.daily.map(function (d) { return d.label; }), datasets: [{ label: '完播率', data: data.daily.map(function (d) { return d.quality.completionRate; }).map(function (v) { return v === null ? null : Math.round(v * 100); }), borderColor: CHART_COLORS[2], backgroundColor: 'rgba(224,92,130,.12)', fill: true, tension: .35, pointRadius: 3 }] },
         options: { scales: { y: { beginAtZero: true, max: 100, ticks: { callback: function (v) { return v + '%'; } } } }, plugins: { legend: { display: false } } },
       });
       this.el.body.appendChild(this.subTitle('每日平均观看进度'));
       this.el.body.appendChild(this.chartBox('weekProgress'));
       this.makeChart('weekProgress', {
         type: 'bar',
-        data: { labels: data.daily.map(function (d) { return d.label; }), datasets: [{ label: '平均进度', data: data.daily.map(function (d) { const q = Stats.quality(Store.getRecords().filter(function (r) { return r.date === d.date; })); return q.averageProgress === null ? null : Math.round(q.averageProgress * 100); }), backgroundColor: CHART_COLORS[1], borderRadius: 8, borderSkipped: false }] },
+        data: { labels: data.daily.map(function (d) { return d.label; }), datasets: [{ label: '平均进度', data: data.daily.map(function (d) { return d.quality.averageProgress; }).map(function (v) { return v === null ? null : Math.round(v * 100); }), backgroundColor: CHART_COLORS[1], borderRadius: 8, borderSkipped: false }] },
         options: { scales: { y: { beginAtZero: true, max: 100, ticks: { callback: function (v) { return v + '%'; } } } }, plugins: { legend: { display: false } } },
       });
       this.el.body.appendChild(this.subTitle('本周 Top5 UP 主'));
@@ -3569,7 +3572,7 @@
     safe(function () {
       Store.initSchema();
       wrapHistory();
-      log('脚本已加载，版本 0.8.1', location.href);
+      log('脚本已加载，版本 0.8.2', location.href);
 
       // 阶段 3：仅视频页启用采集（SPA 路由切换由守护定时器处理）
       safe(function () { ensureCollector(); }, 'ensureCollector');

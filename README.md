@@ -6,23 +6,31 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.8.1"><img src="https://img.shields.io/badge/version-0.8.1-fb7299" alt="version"></a>
+  <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.8.2"><img src="https://img.shields.io/badge/version-0.8.2-fb7299" alt="version"></a>
   <img src="https://img.shields.io/badge/Tampermonkey-compatible-4a90d9" alt="Tampermonkey compatible">
   <img src="https://img.shields.io/badge/storage-local--only-6c757d" alt="local only">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license">
 </p>
 
 <p align="center">
-  <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.8.1">下载 v0.8.1</a> ·
+  <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.8.2">下载 v0.8.2</a> ·
   <a href="./bilibili-watch-panel.user.js">查看用户脚本</a> ·
   <a href="./CHANGELOG.md">版本记录</a>
 </p>
 
 ---
 
+## v0.8.2 计时口径与性能修复
+
+> 当前版本为 **0.8.2**，于 2026-10-04 发布。20 项逻辑测试、42 项隔离浏览器断言已通过；升级前建议先导出 JSON。
+
+- 修复慢速播放（0.5x / 0.75x 等）观看时长被按视频进度少算的问题，时长现在按实际播放的墙钟秒数累计。
+- 修复近 30 天范围下每日完播率、每日平均观看进度图表重复读取全部记录造成的卡顿。
+- 不影响已有本地数据结构，无需迁移；升级后建议继续使用「导出 JSON」定期备份。
+
 ## v0.8.1 本周页控件视觉升级
 
-> 当前版本为 **0.8.1**，于 2026-10-03 发布。18 项逻辑测试、42 项隔离浏览器断言已通过；升级前建议先导出 JSON。
+> 发布于 2026-10-03。18 项逻辑测试、42 项隔离浏览器断言已通过。
 
 - 本周页「近 7 天 / 近 30 天」改为分段切换控件，选中态更清晰。
 - 本周页「每周目标」改为输入组与主操作按钮，提升层次、可读性与操作明确度。
@@ -155,7 +163,7 @@ B站页面公开信息
 4. 安装完成后打开任意 B 站页面，点击右侧粉色浮动按钮。
 5. 在视频页播放视频后，面板会开始记录观看数据。
 
-也可以直接从 [v0.7.1 Release](./bilibili-watch-panel.user.js) 下载脚本。
+也可以直接从 [v0.8.2 Release](./bilibili-watch-panel.user.js) 下载脚本。
 
 ## 隐私与合规
 
@@ -180,6 +188,7 @@ B站页面公开信息
 
 ## 版本
 
+- **v0.8.2**：修复慢速播放时长少算与近 30 天图表重复读取记录的问题。
 - **v0.8.1**：优化本周页时间范围与每周目标控件，补充分组与输入语义。
 - **v0.8.0**：新增设置视图、主题、健康检查与快捷键等体验增强。
 - **v0.7.1**：修复浏览器缩放后浮动按钮可能超出视口的问题，并在窗口尺寸变化时自动重新定位。

@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '..', 'bilibili-watch-panel.user.js'), 'utf8');
-const exposed = source.replace("  if (document.readyState === 'loading') {", "  globalThis.testApi = { CONFIG, Store, Panel, normalizeUiSettings, inspectRecordStorage, sanitizeRecord, mergeSessions, maybeShowWeeklyReminder };\n  if (document.readyState === 'loading') {");
+const exposed = source.replace("  if (document.readyState === 'loading') {", "  globalThis.testApi = { CONFIG, Store, Panel, Stats, normalizeUiSettings, inspectRecordStorage, sanitizeRecord, mergeSessions, activeWatchSeconds, maybeShowWeeklyReminder };\n  if (document.readyState === 'loading') {");
 const data = new Map();
 const writes = [];
 let failRead = '', failWrite = false, silentWrite = false;
@@ -15,7 +15,7 @@ const context = vm.createContext({
   GM_deleteValue(key) { if (failWrite) throw Error('delete denied'); data.delete(key); writes.push(key); },
 });
 vm.runInContext(exposed, context);
-const { CONFIG, Store, Panel, normalizeUiSettings: normalize, inspectRecordStorage: inspect, sanitizeRecord, mergeSessions } = context.testApi;
+const { CONFIG, Store, Panel, Stats, activeWatchSeconds, normalizeUiSettings: normalize, inspectRecordStorage: inspect, sanitizeRecord, mergeSessions } = context.testApi;
 const plain = v => JSON.parse(JSON.stringify(v));
 const record = (extra = {}) => ({ id: 'r', date: '2026-10-03', bvid: 'BVtest', watchedSeconds: 60, timestamp: 1, lastActive: 2, ...extra });
 let checks = 0;
@@ -104,9 +104,26 @@ test('旧记录清洗与会话重复导入兼容', () => {
   assert.ok(sanitizeRecord(record())); const session={startAt:1,endAt:2,endReason:'pause'};
   assert.equal(mergeSessions([session],[session]).length,1); assert.equal(CONFIG.SCHEMA_VERSION,3);
 });
+test('慢速播放按墙钟时间计时，不按视频进度缩水', () => {
+  assert.equal(activeWatchSeconds(5000, 0, 0, 2.5), 5);
+  assert.equal(activeWatchSeconds(5000, 0, 0, 10), 5);
+  assert.equal(activeWatchSeconds(5000, 0, 0, 0), 0);
+  assert.equal(activeWatchSeconds(20000, 0, 0, 2), CONFIG.MAX_TICK_SECONDS);
+});
+test('近30天统计只读取一次主记录', () => {
+  const original = Store.getRecords;
+  let reads = 0;
+  Store.getRecords = () => { reads++; return []; };
+  try {
+    Stats.period(30);
+    assert.equal(reads, 1);
+  } finally {
+    Store.getRecords = original;
+  }
+});
 test('用户脚本不增加权限或外部依赖', () => {
   const cp=require('node:child_process'); const base=cp.execFileSync('git',['show','HEAD:bilibili-watch-panel.user.js'],{encoding:'utf8',cwd:path.join(__dirname,'..')});
   const meta=s=>s.split(/\r?\n/).filter(l=>/^\/\/ @(grant|require|match)\s/.test(l)); assert.deepEqual(meta(source),meta(base));
-  assert.match(source,/@version\s+0\.8\.1/);
+  assert.match(source,/@version\s+0\.8\.2/);
 });
 console.log(`\n${checks} tests passed`);
