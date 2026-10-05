@@ -88,6 +88,9 @@
       --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
       --ease-inout: cubic-bezier(0.45, 0, 0.55, 1);
 
+      /* 五角星（实心），供顶栏 star 数标签的 mask 使用 */
+      --star-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2.6l2.95 5.98 6.6.96-4.78 4.66 1.13 6.57L12 17.67l-5.9 3.1 1.13-6.57L2.45 9.54l6.6-.96z'/%3E%3C/svg%3E");
+
       /* 背景动效：光晕颜色、扫光强度与噪点浓度 */
       --aura-a: rgba(255, 92, 138, 0.16);
       --aura-b: rgba(122, 92, 255, 0.13);
@@ -578,17 +581,32 @@
       color: var(--enamel);
       font-size: 0.71rem;
       line-height: 1;
+      font-variant-numeric: tabular-nums;
+      /* 数字淡入，避免 star 数异步到达时突兀出现 */
+      animation: chip-in 420ms var(--ease-out) both;
     }
 
+    /* star 数前的五角星：用 SVG mask，实心星形随 currentColor 着色 */
     .gh-count::before {
-      width: 7px;
-      height: 7px;
+      flex: none;
+      width: 10px;
+      height: 10px;
       content: "";
-      border: 1.2px solid currentColor;
-      background: transparent;
-      border-radius: 1px;
-      transform: rotate(45deg);
-      opacity: 0.74;
+      background: currentColor;
+      opacity: 0.62;
+      -webkit-mask: var(--star-mask) center / contain no-repeat;
+      mask: var(--star-mask) center / contain no-repeat;
+    }
+
+    @keyframes chip-in {
+      from {
+        opacity: 0;
+        transform: translateY(-2px) scale(0.92);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
     }
 
     .site-nav .nav-install {
