@@ -204,19 +204,22 @@ test('B站事件顺序（pause→seek→play）回看已看片段计一次', () 
   assert.equal(repeats(h), 1);
 });
 
-test('切到新视频后已观看区间清空，不回看旧区间', () => {
+test('切换视频时 Collector.start 重置已观看区间与回看标志', () => {
   const h = createHarness();
   h.play();
   h.advance(60);
-  // 模拟 SPA 切换：Collector.start 重建会话状态
-  h.Collector.stop(false);
-  h.Collector.active = true;
-  h.Collector.videoInfo = { mediaKey: 'BVtest', bvid: 'BVtest', mediaType: 'video', durationSeconds: 300 };
-  h.Collector.videoEl = h.video;
-  h.Collector._lastCurrentTime = NaN;
-  h.Collector._watchedRanges = [];
-  h.Collector._lastKnownTime = NaN;
-  h.Collector._pendingRewatch = false;
+  h.Collector._pendingRewatch = true;
+  assert.ok(h.Collector._watchedRanges.length > 0, '前置条件：会话内已有已观看区间');
+
+  // 走真实的重建入口，而不是手工清空字段
+  h.Collector.start();
+
+  assert.equal(JSON.stringify(h.Collector._watchedRanges), '[]', '切换视频后已观看区间应清空');
+  assert.equal(h.Collector._pendingRewatch, false, '切换视频后回看标志应复位');
+  assert.ok(Number.isNaN(h.Collector._lastKnownTime), '切换视频后播放位置基准应复位');
+  assert.ok(Number.isNaN(h.Collector._lastCurrentTime), '切换视频后计时基准应复位');
+
+  // 新会话从头播放，不因上一支视频的区间而误判重看
   h.video.currentTime = 0;
   h.play();
   h.advance(20);
