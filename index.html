@@ -1134,6 +1134,29 @@
       opacity: 0.55;
     }
 
+    /* 触屏设备的轻量方案：不做 3D 位移，只交叉淡入 + 极轻微上浮 */
+    .preview-slot[data-phase="fade-out"] {
+      z-index: 40 !important;
+      opacity: 0;
+      transition: opacity 260ms var(--ease-out);
+    }
+
+    .preview-slot[data-phase="fade-in"] {
+      z-index: 50 !important;
+      animation: card-fade-in 420ms var(--ease-out) both;
+    }
+
+    @keyframes card-fade-in {
+      from {
+        opacity: 0;
+        transform: translate3d(0, 10px, 0) scale(0.994);
+      }
+      to {
+        opacity: 1;
+        transform: translate3d(0, -22px, 0) scale(1);
+      }
+    }
+
     /* 补位的牌面：从右侧翻上来，先扬后落，收势时略带回弹 */
     .preview-slot[data-phase="in"] {
       z-index: 50 !important;
@@ -1198,10 +1221,8 @@
       transition: opacity 380ms var(--ease-out), transform 700ms var(--ease);
     }
 
-    .preview-slot.is-changing img {
-      opacity: 0;
-      transform: translateY(26px);
-    }
+    /* 图片出现方式由卡片牌组统一负责（见 .preview-deck / data-phase），
+       这里不再对 <img> 单独做淡出淡入 —— 那会与翻页动画叠加。 */
 
     .preview-caption {
       position: absolute;
@@ -2327,6 +2348,16 @@
         transform: translate3d(-104%, 26px, 0) rotate(-2.2deg) scale(0.94) !important;
       }
 
+      /* 触屏淡入在 reduce 下同样瞬时完成 */
+      .preview-slot[data-phase="fade-out"] {
+        opacity: 1 !important;
+      }
+
+      .preview-slot[data-phase="fade-in"] {
+        opacity: 1 !important;
+        transform: none !important;
+      }
+
       .reveal {
         opacity: 1;
         clip-path: none;
@@ -2981,8 +3012,9 @@
     };
 
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    // 触屏 / 无悬停设备不做 3D 翻页，改用轻量淡入（见 flipDeck 的 touchMode）
+    const touchMode = window.matchMedia("(hover: none), (pointer: coarse)");
     let activeView = "today";
-    let changeTimer;
 
     const t = (key) => (I18N[lang] && I18N[lang][key]) || (I18N.zh[key] !== undefined ? I18N.zh[key] : key);
     const pick = (node) => (node && typeof node === "object" ? (node[lang] || node.zh) : node);
@@ -3079,29 +3111,17 @@
       activeView = key;
       setTabs(key);
 
-      const apply = () => {
-        refs.destination.textContent = pick(view.destination);
-        refs.viewName.textContent = pick(view.name);
-        refs.viewCopy.textContent = pick(view.copy);
-        buildRows(view.rows);
+      // 文字区（destination / viewName / viewCopy）随标签立即更新
+      refs.destination.textContent = pick(view.destination);
+      refs.viewName.textContent = pick(view.name);
+      refs.viewCopy.textContent = pick(view.copy);
+      buildRows(view.rows);
 
+      // 图片只在初始化时同步一次：此后每张卡各自持有固定图片，
+      // 翻页换的是「哪张卡在最上层」，不再改写 <img src>。
+      if (source === "initial") {
         refs.previewImage.src = view.image;
         refs.previewImage.alt = pick(view.alt);
-      };
-
-      window.clearTimeout(changeTimer);
-      if (shouldAnimate) {
-        // 先把文字块的旧内容淡出，换页动画走到中段时再落新内容
-        refs.previewSlot.classList.add("is-changing");
-        changeTimer = window.setTimeout(() => {
-          apply();
-          requestAnimationFrame(() => {
-            refs.previewSlot.classList.remove("is-changing");
-          });
-        }, 180);
-      } else {
-        refs.previewSlot.classList.remove("is-changing");
-        apply();
       }
 
       flipDeck(key, shouldAnimate);
@@ -3174,6 +3194,22 @@
         paint();
         deckCards.forEach((card) => card.removeAttribute("data-phase"));
         pageOutCard = null;
+        return;
+      }
+
+      // 触屏 / 无悬停设备：跳过 3D 翻页，只做一次干净的交叉淡入。
+      // 手机上 640ms 的 rotateY + 大位移容易掉帧，观感也偏「晃」。
+      if (touchMode.matches) {
+        paint();
+        void deck.offsetWidth;
+        if (outgoing) outgoing.dataset.phase = "fade-out";
+        front.dataset.phase = "fade-in";
+        pageOutCard = outgoing;
+        pageCleanupTimer = window.setTimeout(() => {
+          if (front.isConnected) front.removeAttribute("data-phase");
+          if (pageOutCard && pageOutCard.isConnected) pageOutCard.removeAttribute("data-phase");
+          pageOutCard = null;
+        }, 460);
         return;
       }
 
