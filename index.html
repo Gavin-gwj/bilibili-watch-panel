@@ -388,17 +388,19 @@
     h1 {
       max-width: 13em;
       margin-bottom: 30px;
-      font-size: clamp(2.1rem, 3.3vw, 3.25rem);
-      line-height: 1.26;
-      letter-spacing: -0.012em;
+      font-size: clamp(2.6rem, 4.6vw, 4.4rem);
+      line-height: 1.16;
+      letter-spacing: -0.022em;
     }
 
+    /* 区块标题：必须小于 h1，否则小标题会压过主标题。
+       目前 h1 上限 4.4rem，h2 上限 3.5rem，形成清晰的 1.26 倍级差。 */
     h2 {
       max-width: 12ch;
       margin-bottom: 0;
-      font-size: clamp(2.35rem, 5.2vw, 5.1rem);
-      line-height: 1.13;
-      letter-spacing: -0.025em;
+      font-size: clamp(2rem, 3.6vw, 3.5rem);
+      line-height: 1.16;
+      letter-spacing: -0.022em;
     }
 
     h3 {
@@ -1313,7 +1315,7 @@
       overflow: hidden;
       border: 1px solid var(--line);
       border-radius: 12px;
-      background: var(--paper);
+      background: var(--preview-ground);
       aspect-ratio: 4 / 5;
       box-shadow: 0 22px 48px var(--shadow-1);
       transition: transform 700ms var(--ease), box-shadow 700ms var(--ease);
@@ -1597,13 +1599,15 @@
       line-height: 1.9;
     }
 
+    /* 右侧票根：刻意与左侧主区拉开明度差，是刻意的对比面板。
+       底色用主题化的 preview-ground，避免硬编码暖黄漏进白天主题。 */
     .destination-side {
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       padding: 34px;
-      color: var(--paper-ink);
-      background: var(--paper);
+      color: var(--surface-ink);
+      background: var(--preview-ground);
     }
 
     .destination-code {
