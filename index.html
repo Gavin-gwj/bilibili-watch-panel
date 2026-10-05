@@ -258,13 +258,11 @@
       transition: transform 280ms var(--ease);
     }
 
-    .site-nav a:hover,
-    .site-nav a[aria-current="page"] {
+    .site-nav a:not(.gh-link):not(.nav-install)[aria-current="true"] {
       color: var(--enamel);
     }
 
-    .site-nav a:hover::after,
-    .site-nav a[aria-current="page"]::after {
+    .site-nav a:not(.gh-link):not(.nav-install)[aria-current="true"]::after {
       transform: scaleX(1);
     }
 
@@ -1608,9 +1606,10 @@
         </span>
       </a>
 
-      <nav class="site-nav" aria-label="主导航">
-        <a href="#records" aria-current="page">记录方式</a>
-        <a href="#privacy">本地优先</a>
+      <nav class="site-nav" aria-label="主导航" data-site-nav>
+        <a href="#top" data-nav-section="top">概览</a>
+        <a href="#records" data-nav-section="records">统计口径</a>
+        <a href="#privacy" data-nav-section="privacy">隐私说明</a>
         <span class="header-divider" aria-hidden="true"></span>
         <div class="header-actions">
           <a class="site-nav-gh gh-link" href="https://github.com/Gavin-gwj/bilibili-watch-panel" target="_blank" rel="noopener noreferrer">
@@ -2038,6 +2037,77 @@
         refs.board.style.setProperty("--mx", "46%");
         refs.board.style.setProperty("--my", "18%");
       });
+    }
+
+    // 顶栏导航高亮：只让当前所在区块对应的那一条亮起
+    const siteNav = document.querySelector("[data-site-nav]");
+    if (siteNav) {
+      const navLinks = Array.from(siteNav.querySelectorAll("a[data-nav-section]"));
+      const navTargets = navLinks
+        .map((link) => {
+          const target = document.getElementById(link.dataset.navSection);
+          return target ? { link, target } : null;
+        })
+        .filter(Boolean);
+
+      let navLocked = false;
+      let navLockTimer = 0;
+
+      const paintNav = (id) => {
+        navLinks.forEach((link) => {
+          if (link.dataset.navSection === id) {
+            link.setAttribute("aria-current", "true");
+          } else {
+            link.removeAttribute("aria-current");
+          }
+        });
+      };
+
+      const pickNavSection = () => {
+        // 以视口上方三分之一处为准，取最接近锚点的区块
+        const anchorLine = window.scrollY + window.innerHeight * 0.34;
+        let current = navTargets[0];
+        navTargets.forEach((entry) => {
+          if (entry.target.offsetTop <= anchorLine) current = entry;
+        });
+        // 页面触底时，最后一个区块直接点亮
+        if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 2) {
+          current = navTargets[navTargets.length - 1];
+        }
+        return current ? current.link.dataset.navSection : null;
+      };
+
+      const syncNav = () => {
+        if (navLocked) return;
+        const id = pickNavSection();
+        if (id) paintNav(id);
+      };
+
+      // 点到哪一项，哪一项立刻亮起
+      navLinks.forEach((link) => {
+        link.addEventListener("click", () => {
+          paintNav(link.dataset.navSection);
+          navLocked = true;
+          window.clearTimeout(navLockTimer);
+          navLockTimer = window.setTimeout(() => {
+            navLocked = false;
+            syncNav();
+          }, 700);
+        });
+      });
+
+      let navFrame = 0;
+      const onNavScroll = () => {
+        if (navFrame) return;
+        navFrame = requestAnimationFrame(() => {
+          navFrame = 0;
+          syncNav();
+        });
+      };
+
+      window.addEventListener("scroll", onNavScroll, { passive: true });
+      window.addEventListener("resize", onNavScroll);
+      syncNav();
     }
 
     const revealItems = document.querySelectorAll(".reveal");
