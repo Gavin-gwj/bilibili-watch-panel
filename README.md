@@ -37,10 +37,6 @@ Bilibili Watch Panel 是一个**纯本地运行的 Tampermonkey 用户脚本**�
 
 ## 从页面到面板
 
-<p align="center">
-  <img src="./docs/screenshots/entry-button.png" alt="B站页面中的浮动入口" width="920">
-</p>
-
 在任意 B 站页面右侧，脚本提供一个可拖动的粉色浮动入口。点击后打开侧边面板；入口位置会在本地记忆，并在浏览器缩放或窗口尺寸变化后自动重新吸附到当前视口内。
 
 ## 界面一览

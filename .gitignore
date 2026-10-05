@@ -16,6 +16,11 @@ node_modules/
 # 编辑器
 .vscode/
 .idea/
+
+# 本地备份与临时补丁
+*.bak
+*.patch
+
 # 本地浏览器验收产物（仅合成数据）
 .playwright-cli/
 output/playwright/
