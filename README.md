@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./docs/assets/banner.png" alt="Bilibili Watch Panel 项目封面">
+  <img src="./docs/assets/banner.png?v=20261005" alt="Bilibili Watch Panel 项目封面">
 </p>
 
 # Bilibili Watch Panel
@@ -71,31 +71,31 @@ Bilibili Watch Panel 是一个**纯本地运行的 Tampermonkey 用户脚本**�
 <table>
   <tr>
     <td width="50%" valign="top">
-      <img src="./docs/screenshots/panel-today.png" alt="今日数据面板">
+      <img src="./docs/screenshots/panel-today.png?v=20261005" alt="今日数据面板">
       <h3>今日：现在的观看状态</h3>
       <p>今日总时长、视频数量、较昨日变化，以及完播率、平均进度、重复观看与播放会话状态。</p>
     </td>
     <td width="50%" valign="top">
-      <img src="./docs/screenshots/panel-week.png" alt="本周数据面板">
+      <img src="./docs/screenshots/panel-week.png?v=20261005" alt="本周数据面板">
       <h3>本周：一周的观看节奏</h3>
       <p>近 7 / 30 天趋势、连续观看天数、环比变化、质量指标与本周洞察。</p>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <img src="./docs/screenshots/panel-all.png" alt="全部数据面板">
+      <img src="./docs/screenshots/panel-all.png?v=20261005" alt="全部数据面板">
       <h3>全部：长期观看档案</h3>
       <p>累计时长、视频总数、覆盖 UP 主、近一年热力图，以及可搜索筛选的完整记录。</p>
     </td>
     <td width="50%" valign="top">
-      <img src="./docs/screenshots/panel-report.png" alt="本周使用报告">
+      <img src="./docs/screenshots/panel-report.png?v=20261005" alt="本周使用报告">
       <h3>报告：一页式周报</h3>
       <p>把本周总览、最爱 UP 主 Top5、每日时长与高峰时段整理成一张适合保存的报告。</p>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <img src="./docs/screenshots/panel-detail.png" alt="单条观看记录详情">
+      <img src="./docs/screenshots/panel-detail.png?v=20261005" alt="单条观看记录详情">
       <h3>详情：单条记录展开</h3>
       <p>点开任意一条记录，查看总观看时长、最高进度、完播状态、播放会话、暂停与跳转次数。</p>
     </td>
