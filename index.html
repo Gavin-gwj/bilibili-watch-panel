@@ -1,0 +1,2106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#08090a">
+  <meta name="description" content="Bilibili Watch Panel，本地优先的 B 站个人观看数据面板。记录真实播放进度，不上传观看数据。">
+  <title>Bilibili Watch Panel | 私人放映时刻表</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2308090a'/%3E%3Cpath d='M6 19h4l3-7 4 11 3-7h6' fill='none' stroke='%23ff5c8a' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --ink: #08090a;
+      --steel: #111417;
+      --steel-2: #171a1d;
+      --enamel: #e9e4d8;
+      --muted: #9ba09b;
+      --signal: #ff5c8a;
+      --signal-deep: #d92b68;
+      --route: #8aa878;
+      --line: rgba(233, 228, 216, 0.15);
+      --line-strong: rgba(233, 228, 216, 0.28);
+      --paper: #f3efe5;
+      --paper-ink: #151619;
+      --display: "Songti SC", "STSong", "Noto Serif SC", "SimSun", serif;
+      --ui: "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC", sans-serif;
+      --measure: "Bahnschrift Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+      --gutter: clamp(20px, 5vw, 88px);
+      --section-gap: clamp(112px, 15vw, 216px);
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--ink);
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--enamel);
+      background:
+        radial-gradient(circle at 82% 12%, rgba(255, 92, 138, 0.09), transparent 24rem),
+        var(--ink);
+      font-family: var(--ui);
+      font-size: 16px;
+      line-height: 1.7;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body::after {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      content: "";
+      pointer-events: none;
+      background: linear-gradient(180deg, transparent 0%, rgba(8, 9, 10, 0.5) 76%, var(--ink) 100%);
+    }
+
+    ::selection {
+      color: var(--ink);
+      background: var(--signal);
+    }
+
+    ::-webkit-scrollbar {
+      width: 11px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--ink);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      border: 3px solid var(--ink);
+      border-radius: 999px;
+      background: #3c4041;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--signal);
+    }
+
+    a {
+      color: inherit;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 0.24em;
+    }
+
+    button,
+    a {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button {
+      color: inherit;
+      font: inherit;
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--signal);
+      outline-offset: 4px;
+    }
+
+    img {
+      display: block;
+      max-width: 100%;
+    }
+
+    h1,
+    h2,
+    h3,
+    p,
+    figure {
+      margin-top: 0;
+    }
+
+    h1,
+    h2 {
+      font-family: var(--display);
+      font-weight: 500;
+      text-wrap: balance;
+    }
+
+    h1 {
+      max-width: 13em;
+      margin-bottom: 30px;
+      font-size: clamp(2.1rem, 3.3vw, 3.25rem);
+      line-height: 1.26;
+      letter-spacing: -0.012em;
+    }
+
+    h2 {
+      max-width: 12ch;
+      margin-bottom: 0;
+      font-size: clamp(2.35rem, 5.2vw, 5.1rem);
+      line-height: 1.13;
+      letter-spacing: -0.025em;
+    }
+
+    h3 {
+      margin-bottom: 12px;
+      font-size: clamp(1.12rem, 1.7vw, 1.45rem);
+      line-height: 1.35;
+    }
+
+    p {
+      color: var(--muted);
+    }
+
+    .skip-link {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      z-index: 100;
+      padding: 10px 14px;
+      color: var(--ink);
+      background: var(--signal);
+      transform: translateY(-160%);
+      transition: transform 180ms ease;
+    }
+
+    .skip-link:focus {
+      transform: translateY(0);
+    }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      border-bottom: 1px solid var(--line);
+      background: rgba(8, 9, 10, 0.94);
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: min(1600px, 100%);
+      min-height: 72px;
+      margin: 0 auto;
+      padding: 0 var(--gutter);
+      gap: 32px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--enamel);
+      text-decoration: none;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      place-items: center;
+      background: var(--steel);
+    }
+
+    .brand-mark svg {
+      width: 21px;
+      height: 21px;
+    }
+
+    .brand-text {
+      display: grid;
+      line-height: 1.05;
+    }
+
+    .brand-text strong {
+      font-family: var(--measure);
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    .brand-text span {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 0.7rem;
+      letter-spacing: 0.14em;
+    }
+
+    .site-nav {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+    }
+
+    .site-nav a {
+      position: relative;
+      padding: 24px 0 21px;
+      color: var(--muted);
+      font-size: 0.84rem;
+      text-decoration: none;
+      transition: color 180ms ease;
+    }
+
+    .site-nav a::after {
+      position: absolute;
+      right: 0;
+      bottom: -1px;
+      left: 0;
+      height: 1px;
+      content: "";
+      background: var(--signal);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 280ms var(--ease);
+    }
+
+    .site-nav a:hover,
+    .site-nav a[aria-current="page"] {
+      color: var(--enamel);
+    }
+
+    .site-nav a:hover::after,
+    .site-nav a[aria-current="page"]::after {
+      transform: scaleX(1);
+    }
+
+    .header-divider {
+      width: 1px;
+      height: 22px;
+      background: var(--line-strong);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .site-nav .gh-link,
+    .site-nav .nav-install {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 36px;
+      padding: 0 13px;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      color: var(--enamel);
+      font-family: var(--measure);
+      font-size: 0.79rem;
+      font-weight: 650;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+      transition: border-color 180ms ease, background-color 180ms ease, color 180ms ease, transform 220ms var(--ease);
+    }
+
+    .site-nav .gh-link::after,
+    .site-nav .nav-install::after {
+      display: none;
+    }
+
+    .gh-link svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+
+    .gh-count {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 21px;
+      height: 21px;
+      padding: 0 6px;
+      border: 1px solid rgb(255 255 255 / 0.08);
+      border-radius: 999px;
+      background: rgb(255 255 255 / 0.045);
+      color: var(--enamel);
+      font-size: 0.71rem;
+      line-height: 1;
+    }
+
+    .gh-count::before {
+      width: 7px;
+      height: 7px;
+      content: "";
+      border: 1.2px solid currentColor;
+      background: transparent;
+      border-radius: 1px;
+      transform: rotate(45deg);
+      opacity: 0.74;
+    }
+
+    .site-nav .nav-install {
+      border-color: rgb(255 255 255 / 0.14);
+      background: rgb(255 92 138 / 0.16);
+      color: #ffb2ca;
+    }
+
+    .site-nav .gh-link:hover,
+    .site-nav .gh-link:focus-visible {
+      border-color: rgb(255 255 255 / 0.22);
+      background: rgb(255 255 255 / 0.055);
+    }
+
+    .site-nav .nav-install:hover,
+    .site-nav .nav-install:focus-visible {
+      border-color: rgb(255 92 138 / 0.58);
+      background: rgb(255 92 138 / 0.28);
+      color: #ffc9d9;
+      transform: translateY(-1px);
+    }
+
+    .site-nav .gh-link:focus-visible,
+    .site-nav .nav-install:focus-visible {
+      outline: 2px solid var(--enamel);
+      outline-offset: 3px;
+    }
+
+    main {
+      overflow: hidden;
+    }
+
+    .shell {
+      width: min(1600px, 100%);
+      margin: 0 auto;
+      padding-right: var(--gutter);
+      padding-left: var(--gutter);
+    }
+
+    .hero {
+      position: relative;
+      min-height: calc(100svh - 72px);
+      padding-top: clamp(72px, 9vw, 132px);
+      padding-bottom: clamp(88px, 10vw, 152px);
+    }
+
+    .hero::before {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: calc(50% - 1px);
+      width: 1px;
+      content: "";
+      background: linear-gradient(180deg, transparent, var(--line), transparent);
+      pointer-events: none;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(500px, 1.1fr);
+      align-items: center;
+      gap: clamp(44px, 6vw, 108px);
+    }
+
+    .hero-copy {
+      position: relative;
+      z-index: 2;
+    }
+
+    .hero-intro {
+      max-width: 34rem;
+      margin-bottom: 38px;
+      font-size: clamp(1rem, 1.4vw, 1.18rem);
+      line-height: 1.9;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 50px;
+      padding: 0 22px;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: color 180ms ease, background 180ms ease, border-color 180ms ease, transform 180ms var(--ease);
+    }
+
+    .button:hover {
+      transform: translateY(-2px);
+    }
+
+    .button:active {
+      transform: translateY(0);
+    }
+
+    .button-primary {
+      color: #130c0f;
+      background: var(--signal);
+    }
+
+    .button-primary:hover {
+      background: #ff789f;
+    }
+
+    .button-secondary {
+      border-color: var(--line-strong);
+      color: var(--enamel);
+      background: transparent;
+    }
+
+    .button-secondary:hover {
+      border-color: var(--signal);
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 24px;
+      margin: 34px 0 0;
+      padding: 18px 0 0;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-family: var(--measure);
+      font-size: 0.76rem;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+      list-style: none;
+    }
+
+    .hero-meta li {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hero-meta li::before {
+      width: 16px;
+      height: 1px;
+      content: "";
+      background: var(--route);
+    }
+
+    .board-wrap {
+      position: relative;
+      min-width: 0;
+      perspective: 1600px;
+    }
+
+    .board-wrap::before {
+      position: absolute;
+      inset: 24px -16px -24px 22px;
+      z-index: -1;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      content: "";
+      background: #0d0f11;
+      transform: rotate(1.6deg);
+    }
+
+    .departure-board {
+      --mx: 46%;
+      --my: 18%;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      border-radius: 14px;
+      background:
+        radial-gradient(circle at var(--mx) var(--my), rgba(255, 255, 255, 0.055), transparent 16rem),
+        linear-gradient(145deg, #171b1e 0%, #0e1113 45%, #151719 100%);
+      transform: rotate(-1.1deg);
+      transition: transform 600ms var(--ease), border-color 300ms ease;
+    }
+
+    .departure-board:hover {
+      border-color: rgba(255, 92, 138, 0.46);
+      transform: rotate(-0.45deg) translateY(-4px);
+    }
+
+    .board-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 58px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--line);
+      gap: 20px;
+    }
+
+    .board-title {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      font-family: var(--measure);
+      font-size: 0.74rem;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+    }
+
+    .board-title svg {
+      width: 19px;
+      height: 19px;
+      color: var(--signal);
+    }
+
+    .board-body {
+      display: grid;
+      grid-template-columns: minmax(238px, 0.7fr) minmax(340px, 1.3fr);
+      min-height: 490px;
+    }
+
+    .board-summary {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-width: 0;
+      padding: 28px 24px 24px;
+      border-right: 1px solid var(--line);
+    }
+
+    .board-destination {
+      margin-bottom: 8px;
+      color: var(--signal);
+      font-family: var(--measure);
+      font-size: 0.73rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .board-view-name {
+      margin-bottom: 10px;
+      font-family: var(--display);
+      font-size: clamp(1.8rem, 3vw, 2.7rem);
+      font-weight: 500;
+      line-height: 1.18;
+    }
+
+    .board-view-copy {
+      margin-bottom: 26px;
+      font-size: 0.88rem;
+      line-height: 1.7;
+    }
+
+    .board-rows {
+      margin: 0;
+      border-top: 1px solid var(--line-strong);
+    }
+
+    .board-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: baseline;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+      gap: 16px;
+    }
+
+    .board-row dt {
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .board-row dd {
+      margin: 0;
+      font-family: var(--measure);
+      font-size: 1.08rem;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.03em;
+      text-align: right;
+    }
+
+    .board-local {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 22px;
+      color: var(--route);
+      font-family: var(--measure);
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .board-local svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .board-preview {
+      position: relative;
+      display: grid;
+      min-width: 0;
+      padding: clamp(18px, 2.2vw, 28px);
+      overflow: hidden;
+      place-items: center;
+      background:
+        radial-gradient(130% 80% at 84% 4%, rgba(255, 92, 138, 0.11), transparent 62%),
+        linear-gradient(180deg, #171b1e, #101315);
+    }
+
+    .preview-slot {
+      position: relative;
+      width: 100%;
+      max-width: 420px;
+      overflow: hidden;
+      border: 1px solid rgba(233, 228, 216, 0.16);
+      border-radius: 14px;
+      background: #f6f7f9;
+      aspect-ratio: 379 / 500;
+      box-shadow:
+        0 30px 64px rgba(0, 0, 0, 0.55),
+        0 1px 0 rgba(255, 255, 255, 0.07) inset;
+      transition: transform 700ms var(--ease), box-shadow 700ms var(--ease);
+    }
+
+    .board-preview:hover .preview-slot {
+      transform: translateY(-6px);
+      box-shadow:
+        0 44px 88px rgba(0, 0, 0, 0.6),
+        0 1px 0 rgba(255, 255, 255, 0.07) inset;
+    }
+
+    .preview-slot::after {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 1px;
+      content: "";
+      pointer-events: none;
+      background: rgba(21, 22, 25, 0.14);
+    }
+
+    .preview-slot img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top center;
+      transform: translateY(0);
+      transition: opacity 380ms ease, transform 700ms var(--ease);
+    }
+
+    .preview-slot.is-changing img {
+      opacity: 0;
+      transform: translateY(26px);
+    }
+
+    .preview-caption {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      z-index: 2;
+      padding: 6px 8px;
+      color: var(--paper-ink);
+      background: rgba(243, 239, 229, 0.92);
+      font-family: var(--measure);
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .board-rail {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 12px;
+      width: 2px;
+      background: var(--signal);
+      opacity: 0.68;
+    }
+
+    .view-tabs {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.022);
+    }
+
+    .view-tab {
+      position: relative;
+      min-height: 28px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: 8px;
+      color: var(--muted);
+      background: transparent;
+      font-family: var(--measure);
+      font-size: 0.72rem;
+      font-weight: 650;
+      letter-spacing: 0.09em;
+      cursor: pointer;
+      transition: color 200ms var(--ease), background-color 200ms var(--ease), transform 200ms var(--ease);
+    }
+
+    .view-tab::after {
+      position: absolute;
+      right: 12px;
+      bottom: 3px;
+      left: 12px;
+      height: 1px;
+      content: "";
+      background: var(--signal);
+      transform: scaleX(0);
+      transform-origin: center;
+      transition: transform 260ms var(--ease);
+    }
+
+    .view-tab:hover {
+      color: var(--enamel);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .view-tab:active {
+      transform: translateY(1px);
+    }
+
+    .view-tab[aria-selected="true"] {
+      color: var(--enamel);
+      background: rgba(255, 92, 138, 0.14);
+    }
+
+    .view-tab[aria-selected="true"]::after {
+      transform: scaleX(1);
+    }
+
+    .hero-statement {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: 1fr minmax(260px, 0.5fr);
+      align-items: end;
+      margin-top: 84px;
+      padding-top: 22px;
+      border-top: 1px solid var(--line);
+      gap: 48px;
+    }
+
+    .hero-statement strong {
+      max-width: 20ch;
+      font-family: var(--display);
+      font-size: clamp(1.3rem, 2.5vw, 2.35rem);
+      font-weight: 500;
+      line-height: 1.45;
+    }
+
+    .hero-statement p {
+      margin-bottom: 0;
+      font-size: 0.9rem;
+    }
+
+    .section {
+      padding-top: var(--section-gap);
+    }
+
+    .section-rule {
+      position: relative;
+    }
+
+    .section-rule::before {
+      position: absolute;
+      top: 0;
+      right: 0;
+      left: 0;
+      height: 1px;
+      content: "";
+      background: var(--line-strong);
+    }
+    .measurement-layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 0.66fr) minmax(0, 1.34fr);
+      gap: clamp(48px, 8vw, 128px);
+    }
+
+    .sticky-heading {
+      position: sticky;
+      top: 120px;
+      align-self: start;
+    }
+
+    .section-copy {
+      max-width: 34rem;
+      margin: 30px 0 0;
+      font-size: 1.02rem;
+      line-height: 1.95;
+    }
+
+    .measurement-sheet {
+      min-width: 0;
+    }
+
+    .measurement-row {
+      display: grid;
+      grid-template-columns: minmax(120px, 0.34fr) minmax(0, 1fr);
+      min-height: 180px;
+      padding: 30px 0;
+      border-bottom: 1px solid var(--line);
+      gap: 36px;
+    }
+
+    .measurement-row:first-child {
+      padding-top: 0;
+    }
+
+    .measurement-index {
+      color: var(--signal);
+      font-family: var(--measure);
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .measurement-body h3 {
+      max-width: 22ch;
+    }
+
+    .measurement-body p {
+      max-width: 58ch;
+      margin-bottom: 0;
+      font-size: 0.94rem;
+    }
+
+    .measurement-evidence {
+      display: inline-block;
+      margin-top: 18px;
+      padding: 7px 9px;
+      border: 1px solid var(--line);
+      color: var(--enamel);
+      font-family: var(--measure);
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .timeline-plate {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      margin-top: 54px;
+      padding: 12px 10px 30px;
+      border-top: 1px solid var(--line-strong);
+      border-bottom: 1px solid var(--line-strong);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent);
+    }
+
+    .timeline-plate::before {
+      position: absolute;
+      right: 0;
+      bottom: 13px;
+      left: 0;
+      height: 1px;
+      content: "";
+      background: var(--line-strong);
+    }
+
+    .timeline-step {
+      position: relative;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      color: var(--muted);
+      font-family: var(--measure);
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .timeline-step::before {
+      position: absolute;
+      top: 31px;
+      left: 50%;
+      z-index: 2;
+      width: 10px;
+      height: 10px;
+      margin-left: -5px;
+      border: 1px solid var(--line-strong);
+      content: "";
+      background: var(--ink);
+    }
+
+    .timeline-step.is-live {
+      color: var(--signal);
+    }
+
+    .timeline-step.is-live::before {
+      border-color: var(--signal);
+      background: var(--signal);
+    }
+
+    .detail-frame {
+      display: grid;
+      grid-template-columns: minmax(0, 248px) minmax(0, 1fr);
+      align-items: center;
+      margin: 62px 0 0;
+      padding-top: 50px;
+      border-top: 1px solid var(--line-strong);
+      gap: clamp(24px, 3vw, 44px);
+    }
+
+    .detail-frame-media {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #f6f7f9;
+      aspect-ratio: 4 / 5;
+      box-shadow: 0 22px 48px rgba(0, 0, 0, 0.46);
+      transition: transform 700ms var(--ease), box-shadow 700ms var(--ease);
+    }
+
+    .detail-frame:hover .detail-frame-media {
+      transform: translateY(-6px);
+      box-shadow: 0 32px 60px rgba(0, 0, 0, 0.54);
+    }
+
+    .detail-frame-media::after {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 1px;
+      content: "";
+      pointer-events: none;
+      background: rgba(21, 22, 25, 0.14);
+    }
+
+    .detail-frame-media img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top center;
+    }
+
+    .detail-frame-code {
+      display: block;
+      margin-bottom: 14px;
+      color: var(--signal);
+      font-family: var(--measure);
+      font-size: 0.72rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .detail-frame figcaption strong {
+      display: block;
+      max-width: 17ch;
+      margin-bottom: 14px;
+      font-family: var(--display);
+      font-size: clamp(1.3rem, 2vw, 1.8rem);
+      font-weight: 500;
+      line-height: 1.42;
+    }
+
+    .detail-frame figcaption p {
+      max-width: 44ch;
+      margin: 0;
+      font-size: 0.92rem;
+    }
+
+    .support-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      margin-top: 70px;
+      border-top: 1px solid var(--line-strong);
+      border-bottom: 1px solid var(--line-strong);
+    }
+
+    .support-item {
+      min-height: 122px;
+      padding: 26px 24px;
+      border-right: 1px solid var(--line);
+    }
+
+    .support-item:last-child {
+      border-right: 0;
+    }
+
+    .support-item strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 0.95rem;
+    }
+
+    .support-item span {
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.6;
+    }
+
+    .privacy-layout {
+      display: grid;
+      grid-template-columns: minmax(300px, 0.62fr) minmax(0, 1.38fr);
+      gap: clamp(52px, 8vw, 136px);
+    }
+
+    .privacy-copy p {
+      max-width: 31rem;
+      margin: 30px 0 0;
+      font-size: 1.01rem;
+      line-height: 1.95;
+    }
+
+    .privacy-route {
+      position: relative;
+      min-height: 430px;
+      padding: 38px;
+      border: 1px solid var(--line-strong);
+      border-radius: 14px;
+      background:
+        linear-gradient(90deg, transparent 49.8%, rgba(233, 228, 216, 0.045) 50%, transparent 50.2%),
+        var(--steel);
+    }
+
+    .route-line {
+      position: absolute;
+      top: 50%;
+      right: 12%;
+      left: 12%;
+      height: 1px;
+      background: var(--route);
+      transform: translateY(-1px);
+    }
+
+    .route-line::after {
+      position: absolute;
+      top: -4px;
+      right: -1px;
+      width: 9px;
+      height: 9px;
+      border-top: 1px solid var(--route);
+      border-right: 1px solid var(--route);
+      content: "";
+      transform: rotate(45deg);
+    }
+
+    .route-nodes {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      align-items: center;
+      min-height: 236px;
+      gap: 28px;
+    }
+
+    .route-node {
+      display: grid;
+      min-height: 138px;
+      padding: 22px 18px;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      background: var(--ink);
+      align-content: center;
+      text-align: center;
+    }
+
+    .route-node-code {
+      color: var(--route);
+      font-family: var(--measure);
+      font-size: 0.7rem;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+    }
+
+    .route-node strong {
+      margin-top: 10px;
+      font-size: 1rem;
+    }
+
+    .route-node span {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 0.72rem;
+    }
+
+    .server-spur {
+      position: absolute;
+      top: calc(50% - 128px);
+      left: 50%;
+      width: 1px;
+      height: 92px;
+      background: var(--line-strong);
+    }
+
+    .server-spur::before,
+    .server-spur::after {
+      position: absolute;
+      bottom: -7px;
+      left: 50%;
+      width: 16px;
+      height: 1px;
+      content: "";
+      background: var(--signal);
+      transform-origin: center;
+    }
+
+    .server-spur::before {
+      transform: translateX(-50%) rotate(45deg);
+    }
+
+    .server-spur::after {
+      transform: translateX(-50%) rotate(-45deg);
+    }
+
+    .server-label {
+      position: absolute;
+      top: calc(50% - 164px);
+      left: 50%;
+      width: 170px;
+      color: var(--muted);
+      font-family: var(--measure);
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      text-align: center;
+      text-transform: uppercase;
+      transform: translateX(-50%);
+    }
+
+    .privacy-facts {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      margin-top: 34px;
+      border-top: 1px solid var(--line);
+    }
+
+    .privacy-fact {
+      padding: 20px 18px 0 0;
+    }
+
+    .privacy-fact strong {
+      display: block;
+      color: var(--signal);
+      font-family: var(--measure);
+      font-size: 1.25rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .privacy-fact span {
+      color: var(--muted);
+      font-size: 0.75rem;
+    }
+
+    .install {
+      padding-top: var(--section-gap);
+      padding-bottom: clamp(72px, 9vw, 128px);
+    }
+
+    .destination-plate {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+      border: 1px solid var(--line-strong);
+      border-radius: 14px;
+      overflow: hidden;
+      background: var(--steel);
+    }
+
+    .destination-main {
+      position: relative;
+      min-height: 440px;
+      padding: clamp(34px, 5vw, 68px);
+      overflow: hidden;
+    }
+
+    .destination-main::after {
+      position: absolute;
+      right: -90px;
+      bottom: -140px;
+      width: 360px;
+      height: 360px;
+      border: 1px solid var(--line-strong);
+      border-radius: 50%;
+      content: "";
+    }
+
+    .destination-main h2 {
+      max-width: 10ch;
+    }
+
+    .destination-main p {
+      max-width: 34rem;
+      margin: 30px 0 36px;
+      font-size: 1rem;
+      line-height: 1.9;
+    }
+
+    .destination-side {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 34px;
+      color: var(--paper-ink);
+      background: var(--paper);
+    }
+
+    .destination-code {
+      color: #65645f;
+      font-family: var(--measure);
+      font-size: 0.7rem;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+    }
+
+    .destination-name {
+      margin: 24px 0;
+      font-family: var(--display);
+      font-size: clamp(2rem, 3vw, 3.4rem);
+      line-height: 1.1;
+    }
+
+    .destination-meta {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .destination-meta li {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-top: 1px solid rgba(21, 22, 25, 0.18);
+      gap: 20px;
+      font-size: 0.78rem;
+    }
+
+    .destination-meta span {
+      color: #65645f;
+    }
+
+    .website-footer {
+      padding: 34px 0 44px;
+      border-top: 1px solid var(--line);
+    }
+
+    .footer-inner {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 32px;
+    }
+
+    .footer-copy {
+      max-width: 48rem;
+    }
+
+    .footer-copy p {
+      margin: 0;
+      font-size: 0.78rem;
+      line-height: 1.7;
+    }
+
+    .footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 12px 22px;
+      font-size: 0.78rem;
+    }
+
+    .footer-links a {
+      color: var(--muted);
+      text-decoration-color: transparent;
+      transition: color 180ms ease, text-decoration-color 180ms ease;
+    }
+
+    .footer-links a:hover {
+      color: var(--enamel);
+      text-decoration-color: var(--signal);
+    }
+
+    .reveal {
+      opacity: 0;
+      clip-path: inset(0 0 18% 0);
+      transform: translateY(26px);
+      transition: opacity 700ms ease, clip-path 900ms var(--ease), transform 900ms var(--ease);
+    }
+
+    .reveal.is-visible {
+      opacity: 1;
+      clip-path: inset(0 0 0 0);
+      transform: translateY(0);
+    }
+
+    @media (max-width: 1180px) {
+      .hero-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero::before {
+        display: none;
+      }
+
+      .hero-copy {
+        max-width: 860px;
+      }
+
+      .board-wrap {
+        width: min(920px, 100%);
+        margin-left: auto;
+      }
+
+      .measurement-layout,
+      .privacy-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .sticky-heading {
+        position: static;
+      }
+
+      .board-header {
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 12px 16px;
+        min-height: 0;
+      }
+
+      .view-tabs {
+        flex: 1 1 100%;
+        justify-content: space-between;
+      }
+
+      .view-tab {
+        flex: 1 1 auto;
+        min-height: 32px;
+      }
+    }
+
+    @media (max-width: 840px) {
+      .site-nav a:not(.gh-link):not(.nav-install),
+      .header-divider {
+        display: none;
+      }
+
+      .site-nav {
+        gap: 8px;
+      }
+
+      .gh-label {
+        display: none;
+      }
+
+      .site-nav .gh-link,
+      .site-nav .nav-install {
+        min-height: 34px;
+        padding: 0 11px;
+        font-size: 0.75rem;
+      }
+
+      h1 {
+        max-width: 100%;
+      }
+
+      .hero {
+        min-height: auto;
+        padding-top: 64px;
+      }
+
+      .board-body {
+        grid-template-columns: 1fr;
+      }
+
+      .board-summary {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .board-preview {
+        padding: clamp(20px, 5vw, 34px);
+      }
+
+      .preview-slot {
+        max-width: 380px;
+      }
+
+      .detail-frame {
+        grid-template-columns: 1fr;
+        gap: 26px;
+      }
+
+      .detail-frame-media {
+        max-width: 248px;
+      }
+
+      .measurement-row {
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+
+      .support-strip {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .support-item:nth-child(2) {
+        border-right: 0;
+      }
+
+      .support-item:nth-child(-n + 2) {
+        border-bottom: 1px solid var(--line);
+      }
+
+      .route-nodes {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+
+      .privacy-route {
+        min-height: 720px;
+      }
+
+      .route-line {
+        top: 14%;
+        bottom: 14%;
+        left: 50%;
+        width: 1px;
+        height: auto;
+        transform: none;
+      }
+
+      .route-line::after {
+        top: auto;
+        right: -4px;
+        bottom: -1px;
+        transform: rotate(135deg);
+      }
+
+      .server-spur {
+        display: none;
+      }
+
+      .server-label {
+        top: 24px;
+      }
+
+      .destination-plate {
+        grid-template-columns: 1fr;
+      }
+
+      .footer-inner {
+        flex-direction: column;
+      }
+
+      .footer-links {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .brand-text span {
+        display: none;
+      }
+
+      .header-inner {
+        min-height: 64px;
+      }
+
+      .brand-text strong {
+        font-size: 0.83rem;
+        letter-spacing: 0.01em;
+      }
+
+      .site-nav .gh-link,
+      .site-nav .nav-install {
+        min-height: 32px;
+        padding: 0 9px;
+        font-size: 0.71rem;
+      }
+
+      .gh-count {
+        height: 19px;
+        min-width: 18px;
+        font-size: 0.66rem;
+      }
+
+      .hero-actions {
+        align-items: stretch;
+      }
+
+      .button {
+        width: 100%;
+      }
+
+
+      .board-summary,
+      .board-preview {
+        padding-right: 18px;
+        padding-left: 18px;
+      }
+
+      .view-tab {
+        padding: 0 10px;
+        font-size: 0.7rem;
+      }
+
+      .support-strip,
+      .privacy-facts {
+        grid-template-columns: 1fr;
+      }
+
+      .support-item {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .support-item:last-child {
+        border-bottom: 0;
+      }
+
+      .privacy-fact {
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .destination-side {
+        padding: 28px 22px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+      }
+
+      .departure-board,
+      .departure-board:hover {
+        transform: none;
+      }
+
+      .reveal {
+        opacity: 1;
+        clip-path: none;
+        transform: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="#top" aria-label="Bilibili Watch Panel 首页">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M3 14h4l3-7 4 11 3-7h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span class="brand-text">
+          <strong>BWP / 观看数据面板</strong>
+          <span>LOCAL WATCH LEDGER</span>
+        </span>
+      </a>
+
+      <nav class="site-nav" aria-label="主导航">
+        <a href="#records" aria-current="page">记录方式</a>
+        <a href="#privacy">本地优先</a>
+        <span class="header-divider" aria-hidden="true"></span>
+        <div class="header-actions">
+          <a class="site-nav-gh gh-link" href="https://github.com/Gavin-gwj/bilibili-watch-panel" target="_blank" rel="noopener noreferrer">
+
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
+            </svg>
+            <span class="gh-label">GitHub</span>
+            <span class="gh-count" data-stars hidden aria-label="GitHub star 数">0</span>
+          </a>
+          <a class="site-nav-install nav-install" href="https://raw.githubusercontent.com/Gavin-gwj/bilibili-watch-panel/main/bilibili-watch-panel.user.js">安装脚本</a>
+
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero shell" id="top">
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <h1>你的观看记录，应该有它自己的时刻表。</h1>
+          <p class="hero-intro">
+            Bilibili Watch Panel 把真实播放进度、播放会话和观看质量整理成一份本地档案。没有账号，没有服务器，没有数据上传。
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="https://raw.githubusercontent.com/Gavin-gwj/bilibili-watch-panel/main/bilibili-watch-panel.user.js">安装用户脚本</a>
+            <a class="button button-secondary" href="https://github.com/Gavin-gwj/bilibili-watch-panel">查看 GitHub</a>
+          </div>
+          <ul class="hero-meta" aria-label="项目信息">
+            <li>Tampermonkey</li>
+            <li>本地存储</li>
+            <li>MIT License</li>
+            <li>v0.9.1</li>
+          </ul>
+        </div>
+
+        <div class="board-wrap">
+          <article class="departure-board" id="departureBoard" aria-label="产品数据面板预览">
+            <div class="board-rail" aria-hidden="true"></div>
+
+            <div class="board-header">
+              <div class="board-title">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.6"/>
+                  <path d="M7 9h2.5L12 6l2.5 3H17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span>Private watch ledger</span>
+              </div>
+              <div class="view-tabs" role="tablist" aria-label="四种面板视图">
+                <button class="view-tab" id="heroTabToday" type="button" role="tab" aria-selected="true" data-view="today" aria-controls="heroBoardPanel">今日</button>
+                <button class="view-tab" id="heroTabWeek" type="button" role="tab" aria-selected="false" data-view="week" aria-controls="heroBoardPanel">本周</button>
+                <button class="view-tab" id="heroTabAll" type="button" role="tab" aria-selected="false" data-view="all" aria-controls="heroBoardPanel">全部</button>
+                <button class="view-tab" id="heroTabReport" type="button" role="tab" aria-selected="false" data-view="report" aria-controls="heroBoardPanel">报告</button>
+              </div>
+            </div>
+            <div class="board-body" id="heroBoardPanel" role="tabpanel" aria-labelledby="heroTabToday" tabindex="0">
+              <div class="board-summary">
+                <div>
+                  <div class="board-destination" id="boardDestination">Today / Local record</div>
+                  <div class="board-view-name" id="boardViewName">今日观看</div>
+                  <p class="board-view-copy" id="boardViewCopy">今天看了多久，视频数量如何变化，最近一次观看发生在什么时候。</p>
+                  <dl class="board-rows" id="boardRows"></dl>
+                </div>
+                <div class="board-local">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M7 11V8a5 5 0 0 1 10 0v3M5 11h14v9H5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                    <path d="M12 15v2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                  </svg>
+                  <span>Stored on this browser</span>
+                </div>
+              </div>
+
+              <div class="board-preview">
+                <div class="preview-slot" id="previewSlot">
+                  <img id="boardPreviewImage" src="docs/screenshots/panel-today.png" alt="今日观看数据面板示例画面">
+                  <span class="preview-caption">示例数据</span>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div class="hero-statement">
+        <strong>它不猜测你看了多久，它只记录真正发生过的播放。</strong>
+        <p>事件驱动采集、5 秒心跳、会话结算与跨零点拆分共同组成一套可解释的本地统计口径。</p>
+      </div>
+    </section>
+
+    <section class="section shell section-rule" id="records">
+      <div class="measurement-layout">
+        <div class="sticky-heading reveal">
+          <h2>观看时长不是猜出来的。</h2>
+          <p class="section-copy">常见的时间统计会把暂停、缓冲和切后台也算进去。这里的每一秒都来自播放器的真实推进，记录方式可以被解释，也可以被验证。</p>
+        </div>
+
+        <div class="measurement-sheet">
+          <article class="measurement-row reveal">
+            <div class="measurement-index">Play stream</div>
+            <div class="measurement-body">
+              <h3>只有 currentTime 前进，观看时间才前进。</h3>
+              <p>暂停、缓冲、切到后台和系统休眠不会伪装成有效观看。5 秒心跳读取真实播放进度，并把差额写进当天记录。</p>
+              <span class="measurement-evidence">5s heartbeat</span>
+            </div>
+          </article>
+
+          <article class="measurement-row reveal">
+            <div class="measurement-index">Session settle</div>
+            <div class="measurement-body">
+              <h3>每一次播放，都有开始与结束。</h3>
+              <p>播放会话记录暂停、切后台、跳转和离开页面等事件，用于计算中断率、平均单次会话和观看质量。</p>
+              <span class="measurement-evidence">pause / seek / ended</span>
+            </div>
+          </article>
+
+          <article class="measurement-row reveal">
+            <div class="measurement-index">Across midnight</div>
+            <div class="measurement-body">
+              <h3>跨过零点，一天的账仍然清楚。</h3>
+              <p>一段观看会按本地日期边界拆分到两天，避免深夜观看全部落在某一天，也避免累计时长出现重复。</p>
+              <span class="measurement-evidence">date boundary split</span>
+            </div>
+          </article>
+
+          <div class="timeline-plate reveal" aria-label="观看时间线示意">
+            <div class="timeline-step">00:00</div>
+            <div class="timeline-step">Play</div>
+            <div class="timeline-step">Pause</div>
+            <div class="timeline-step is-live">Real</div>
+            <div class="timeline-step">Resume</div>
+            <div class="timeline-step">Ended</div>
+          </div>
+
+          <figure class="detail-frame reveal">
+            <div class="detail-frame-media">
+              <img src="docs/screenshots/panel-detail.png" alt="单条观看记录详情面板示例画面">
+            </div>
+            <figcaption>
+              <span class="detail-frame-code">Record detail</span>
+              <strong>每一条记录，都能展开到这一层。</strong>
+              <p>总观看时长、最高进度、完播状态、播放会话数、中断率、暂停 / 切后台 / 跳转次数，以及首次与最近观看时间，都保存在同一条本地记录里。</p>
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+
+      <div class="support-strip reveal">
+        <div class="support-item">
+          <strong>视频、番剧、课程</strong>
+          <span>覆盖 /video、/bangumi/play 与 /cheese/play 三类播放页。</span>
+        </div>
+        <div class="support-item">
+          <strong>分 P 与分集</strong>
+          <span>mediaKey 会保留分 P 或分集序号，避免不同内容混成一条记录。</span>
+        </div>
+        <div class="support-item">
+          <strong>JSON 导入导出</strong>
+          <span>换浏览器时由你主动导出和导入，合并记录并去重会话。</span>
+        </div>
+        <div class="support-item">
+          <strong>周报 PNG</strong>
+          <span>把本周总览、最爱 UP 主和每日时长整理成一张可保存的报告。</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section shell" id="privacy">
+      <div class="privacy-layout">
+        <div class="privacy-copy reveal">
+          <h2>你的数据只走这一条线。</h2>
+          <p>从 B 站播放事件到本地存储，再到你主动选择的导出文件，整条路径都在浏览器里完成。项目没有账号系统，没有服务端，也不会上传观看数据。</p>
+        </div>
+
+        <div class="reveal">
+          <div class="privacy-route" aria-label="本地数据处理路径">
+            <div class="route-line" aria-hidden="true"></div>
+            <div class="server-label">Server path not connected</div>
+            <div class="server-spur" aria-hidden="true"></div>
+            <div class="route-nodes">
+              <div class="route-node">
+                <span class="route-node-code">Source 01</span>
+                <strong>B 站播放事件</strong>
+                <span>公开页面与播放器状态</span>
+              </div>
+              <div class="route-node">
+                <span class="route-node-code">Local 02</span>
+                <strong>Shadow DOM 面板</strong>
+                <span>采集与统计都在本机执行</span>
+              </div>
+              <div class="route-node">
+                <span class="route-node-code">Export 03</span>
+                <strong>浏览器本地存储</strong>
+                <span>只有你能导出或清空</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="privacy-facts">
+            <div class="privacy-fact"><strong>0</strong><span>观看数据上传请求</span></div>
+            <div class="privacy-fact"><strong>3</strong><span>固定 GM 存储权限</span></div>
+            <div class="privacy-fact"><strong>MIT</strong><span>开放源代码许可证</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="install shell" id="install">
+      <div class="destination-plate reveal">
+        <div class="destination-main">
+          <h2>从今天开始，给自己的观看留一份底稿。</h2>
+          <p>安装 Tampermonkey，再点击安装用户脚本。打开任意 B 站页面后，右侧会出现可拖动的观看数据入口。</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="https://raw.githubusercontent.com/Gavin-gwj/bilibili-watch-panel/main/bilibili-watch-panel.user.js">获取 v0.9.1</a>
+            <a class="button button-secondary" href="https://github.com/Gavin-gwj/bilibili-watch-panel#安装">查看安装说明</a>
+          </div>
+        </div>
+
+        <aside class="destination-side" aria-label="项目终点信息">
+          <div>
+            <div class="destination-code">Destination</div>
+            <div class="destination-name">本地观看档案</div>
+            <ul class="destination-meta">
+              <li><span>运行方式</span><strong>Tampermonkey</strong></li>
+              <li><span>数据位置</span><strong>浏览器本地</strong></li>
+              <li><span>服务器</span><strong>无</strong></li>
+              <li><span>版本</span><strong>0.9.1</strong></li>
+            </ul>
+          </div>
+          <p class="destination-code">Bilibili Watch Panel</p>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <footer class="website-footer shell">
+    <div class="footer-inner">
+      <div class="footer-copy">
+        <p>Bilibili Watch Panel 是一个纯本地运行的 Tampermonkey 用户脚本。页面截图中的数据来自本机浏览器示例，仅用于展示界面。</p>
+      </div>
+      <nav class="footer-links" aria-label="页脚导航">
+        <a href="https://github.com/Gavin-gwj/bilibili-watch-panel">GitHub</a>
+        <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.9.1">Release</a>
+        <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/blob/main/CHANGELOG.md">CHANGELOG</a>
+        <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/blob/main/LICENSE">MIT License</a>
+      </nav>
+    </div>
+  </footer>
+  <script>
+    const views = {
+      today: {
+        destination: "Today / Local record",
+        name: "今日观看",
+        copy: "查看今日总时长、视频数量、完播状态、平均进度与最近活跃时段。记录少时，会用近 7 天节奏补足上下文。",
+        rows: [
+          ["今日总时长", "39秒"],
+          ["今日视频数", "1 个"],
+          ["完播率", "100%"],
+          ["平均单次会话", "12秒"]
+        ],
+        image: "docs/screenshots/panel-today.png",
+        alt: "今日观看数据面板示例画面"
+      },
+      week: {
+        destination: "Week / Rhythm",
+        name: "本周节奏",
+        copy: "把近 7 天的时长、连续观看、重复观看与平均单次放在同一条节奏线上，快速判断这一周看得多不多。",
+        rows: [
+          ["近 7 天总时长", "16分53秒"],
+          ["连续观看", "4 天"],
+          ["平均进度", "59%"],
+          ["平均单次会话", "19秒"]
+        ],
+        image: "docs/screenshots/panel-week.png",
+        alt: "本周观看节奏面板示例画面"
+      },
+      all: {
+        destination: "Archive / All time",
+        name: "全部档案",
+        copy: "用累计数据、53 周热力图与搜索筛选回看长期档案。所有记录仍留在当前浏览器中，不上传，也不依赖账号。",
+        rows: [
+          ["累计总时长", "16分53秒"],
+          ["总视频数", "12 个"],
+          ["覆盖 UP 主", "11 位"],
+          ["平均单视频时长", "1分32秒"]
+        ],
+        image: "docs/screenshots/panel-all.png",
+        alt: "全部观看档案面板示例画面"
+      },
+      report: {
+        destination: "Report / Weekly",
+        name: "本周报告",
+        copy: "汇总本周总览、UP 主 Top5 与每日趋势，并导出为一张 PNG 周报，适合保存或主动分享。",
+        rows: [
+          ["本周总时长", "42秒"],
+          ["本周视频数", "1 个"],
+          ["最爱 UP 主", "Voidmatrix"],
+          ["高峰时段", "下午"]
+        ],
+        image: "docs/screenshots/panel-report.png",
+        alt: "本周观看报告面板示例画面"
+      }
+    };
+
+
+
+    const refs = {
+      board: document.getElementById("departureBoard"),
+      boardPanel: document.getElementById("heroBoardPanel"),
+      destination: document.getElementById("boardDestination"),
+      viewName: document.getElementById("boardViewName"),
+      viewCopy: document.getElementById("boardViewCopy"),
+      rows: document.getElementById("boardRows"),
+      previewSlot: document.getElementById("previewSlot"),
+      previewImage: document.getElementById("boardPreviewImage")
+    };
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let activeView = "today";
+    let changeTimer;
+
+    const buildRows = (rows) => {
+      refs.rows.replaceChildren();
+      rows.forEach(([label, value]) => {
+        const row = document.createElement("div");
+        const term = document.createElement("dt");
+        const detail = document.createElement("dd");
+        row.className = "board-row";
+        term.textContent = label;
+        detail.textContent = value;
+        row.append(term, detail);
+        refs.rows.append(row);
+      });
+    };
+
+    const tabLabels = {
+      today: "heroTabToday",
+      week: "heroTabWeek",
+      all: "heroTabAll",
+      report: "heroTabReport"
+    };
+
+    const setTabs = (key, focusTab = false) => {
+      document.querySelectorAll(".view-tab").forEach((tab) => {
+        const selected = tab.dataset.view === key;
+        tab.setAttribute("aria-selected", String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+        if (selected && focusTab) tab.focus();
+      });
+      refs.boardPanel.setAttribute("aria-labelledby", tabLabels[key]);
+    };
+
+    const renderView = (key, source = "user") => {
+      if (!views[key]) return;
+      const view = views[key];
+      const shouldAnimate = source !== "initial" && !reduceMotion.matches && key !== activeView;
+      activeView = key;
+      setTabs(key);
+
+      const apply = () => {
+        refs.destination.textContent = view.destination;
+        refs.viewName.textContent = view.name;
+        refs.viewCopy.textContent = view.copy;
+        buildRows(view.rows);
+
+        refs.previewImage.src = view.image;
+        refs.previewImage.alt = view.alt;
+      };
+
+      window.clearTimeout(changeTimer);
+      if (shouldAnimate) {
+        refs.previewSlot.classList.add("is-changing");
+        changeTimer = window.setTimeout(() => {
+          apply();
+          requestAnimationFrame(() => {
+            refs.previewSlot.classList.remove("is-changing");
+          });
+        }, 180);
+      } else {
+        refs.previewSlot.classList.remove("is-changing");
+        apply();
+      }
+    };
+
+    document.querySelectorAll(".view-tab").forEach((tab) => {
+      tab.addEventListener("click", () => renderView(tab.dataset.view, "user"));
+    });
+
+    document.querySelectorAll('[role="tablist"]').forEach((list) => {
+      list.addEventListener("keydown", (event) => {
+        const tabs = Array.from(list.querySelectorAll('[role="tab"]'));
+        const current = tabs.indexOf(document.activeElement);
+        if (current < 0) return;
+
+        let next = current;
+        if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (current + 1) % tabs.length;
+        if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (current - 1 + tabs.length) % tabs.length;
+        if (event.key === "Home") next = 0;
+        if (event.key === "End") next = tabs.length - 1;
+        if (next === current) return;
+
+        event.preventDefault();
+        renderView(tabs[next].dataset.view, "keyboard");
+        tabs[next].focus();
+      });
+    });
+
+    if (refs.board) {
+      let pointerFrame = 0;
+      let pointerX = 0;
+      let pointerY = 0;
+      refs.board.addEventListener("pointermove", (event) => {
+        if (reduceMotion.matches) return;
+        const bounds = refs.board.getBoundingClientRect();
+        pointerX = ((event.clientX - bounds.left) / bounds.width) * 100;
+        pointerY = ((event.clientY - bounds.top) / bounds.height) * 100;
+        if (pointerFrame) return;
+        pointerFrame = requestAnimationFrame(() => {
+          refs.board.style.setProperty("--mx", pointerX.toFixed(2) + "%");
+          refs.board.style.setProperty("--my", pointerY.toFixed(2) + "%");
+          pointerFrame = 0;
+        });
+      });
+      refs.board.addEventListener("pointerleave", () => {
+        refs.board.style.setProperty("--mx", "46%");
+        refs.board.style.setProperty("--my", "18%");
+      });
+    }
+
+    const revealItems = document.querySelectorAll(".reveal");
+    if (reduceMotion.matches || !("IntersectionObserver" in window)) {
+      revealItems.forEach((item) => item.classList.add("is-visible"));
+    } else {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add("is-visible");
+          observer.unobserve(entry.target);
+        });
+      }, { threshold: 0.12, rootMargin: "0px 0px -8% 0px" });
+      revealItems.forEach((item) => observer.observe(item));
+    }
+
+    renderView("today", "initial");
+
+    Object.values(views).forEach((view) => {
+      const preload = new Image();
+      preload.src = view.image;
+    });
+
+    const starChip = document.querySelector("[data-stars]");
+    if (starChip) {
+      const renderStars = (value) => {
+        if (!Number.isInteger(value) || value < 0) return;
+        starChip.textContent = String(value);
+        starChip.hidden = false;
+      };
+      const cacheKey = "bwp-github-stars";
+      let cached = null;
+      try {
+        cached = sessionStorage.getItem(cacheKey);
+        if (cached !== null) renderStars(Number.parseInt(cached, 10));
+      } catch {
+        cached = null;
+      }
+      if (cached === null && "fetch" in window) {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 5000);
+        fetch("https://api.github.com/repos/Gavin-gwj/bilibili-watch-panel", {
+          headers: { Accept: "application/vnd.github+json" },
+          signal: controller.signal
+        }).then((response) => {
+          if (!response.ok) throw new Error("GitHub API unavailable");
+          return response.json();
+        }).then((data) => {
+          if (!Number.isInteger(data.stargazers_count)) return;
+          renderStars(data.stargazers_count);
+          try {
+            sessionStorage.setItem(cacheKey, String(data.stargazers_count));
+          } catch {}
+        }).catch(() => {
+          starChip.hidden = true;
+        }).finally(() => {
+          window.clearTimeout(timeout);
+        });
+      }
+    }
+  </script>
+</body>
+</html>
+
+
+
