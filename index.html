@@ -3356,34 +3356,47 @@
         starChip.hidden = false;
       };
       const cacheKey = "bwp-github-stars";
+      // 限流恢复前先记住旧值：GitHub 未认证接口每小时仅 60 次/IP，
+      // 同一网络下任何人刷爆配额，所有人都会拿到 403。
       let cached = null;
       try {
-        cached = sessionStorage.getItem(cacheKey);
+        cached = localStorage.getItem(cacheKey);
         if (cached !== null) renderStars(Number.parseInt(cached, 10));
       } catch {
         cached = null;
       }
-      if (cached === null && "fetch" in window) {
-        const controller = new AbortController();
-        const timeout = window.setTimeout(() => controller.abort(), 5000);
-        fetch("https://api.github.com/repos/Gavin-gwj/bilibili-watch-panel", {
+      // 直接问 GitHub；失败再退到 shields.io（它用自有凭据取数，不受同一配额限制）
+      const sources = [
+        () => fetch("https://api.github.com/repos/Gavin-gwj/bilibili-watch-panel", {
           headers: { Accept: "application/vnd.github+json" },
-          signal: controller.signal
-        }).then((response) => {
-          if (!response.ok) throw new Error("GitHub API unavailable");
-          return response.json();
-        }).then((data) => {
-          if (!Number.isInteger(data.stargazers_count)) return;
-          renderStars(data.stargazers_count);
+          signal: AbortSignal.timeout(5000)
+        }).then((r) => {
+          if (!r.ok) throw new Error("GitHub API unavailable");
+          return r.json();
+        }).then((d) => d.stargazers_count),
+        () => fetch("https://img.shields.io/github/stars/Gavin-gwj/bilibili-watch-panel.json", {
+          signal: AbortSignal.timeout(5000)
+        }).then((r) => {
+          if (!r.ok) throw new Error("shields.io unavailable");
+          return r.json();
+        }).then((d) => Number.parseInt(d.value, 10))
+      ];
+      const trySource = (index) => {
+        if (index >= sources.length) {
+          // 全部失败：保留已渲染的缓存值，没有缓存才隐藏
+          if (cached === null) starChip.hidden = true;
+          return;
+        }
+        sources[index]().then((value) => {
+          if (!Number.isInteger(value) || value < 0) throw new Error("bad value");
+          renderStars(value);
           try {
-            sessionStorage.setItem(cacheKey, String(data.stargazers_count));
+            localStorage.setItem(cacheKey, String(value));
+            cached = String(value);
           } catch {}
-        }).catch(() => {
-          starChip.hidden = true;
-        }).finally(() => {
-          window.clearTimeout(timeout);
-        });
-      }
+        }).catch(() => trySource(index + 1));
+      };
+      trySource(0);
     }
     /* ============================================================
        指针粒子拖尾
