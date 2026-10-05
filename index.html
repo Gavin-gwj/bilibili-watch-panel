@@ -86,6 +86,10 @@
       /* 粉底按钮（深色主题的 #ff5c8a 很亮）上，白环最高只能到 2.94:1，
          改用页面近黑的深环才能过 3:1 */
       --focus-on-signal: #0b0c0e;
+      /* 粒子拖尾：深色底上偏亮，形成星尘感 */
+      --dust-core: 255, 178, 202;
+      --dust-warm: 255, 214, 178;
+      --dust-cool: 178, 202, 255;
       --glow-a: rgba(255, 92, 138, 0.09);
       --glow-b: rgba(255, 92, 138, 0.11);
       --glow-c: rgba(255, 92, 138, 0.14);
@@ -186,6 +190,10 @@
       --focus-ring: #c01a52;
       --focus-halo: rgba(244, 242, 238, 0.94);
       --focus-on-signal: #ffffff;
+      /* 粒子拖尾：浅色底上加深，否则白点看不见 */
+      --dust-core: 192, 26, 82;
+      --dust-warm: 198, 108, 26;
+      --dust-cool: 58, 96, 190;
       --glow-a: rgba(255, 92, 138, 0.07);
       --glow-b: rgba(255, 92, 138, 0.09);
       --glow-c: rgba(255, 92, 138, 0.13);
@@ -296,6 +304,22 @@
       opacity: var(--grain-opacity);
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
       animation: grain-shift 8s steps(6) infinite;
+    }
+
+    /* 第四层：跟随指针的粒子拖尾
+       画布铺在光晕与噪点之上、内容之下；只负责绘制，
+       位置与节流交给脚本，避免每帧重排。 */
+    .cursor-particles {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      transition: opacity 600ms var(--ease-out);
+    }
+
+    .cursor-particles.is-active {
+      opacity: 1;
     }
 
     @keyframes orb-drift-a {
@@ -2198,6 +2222,7 @@
     <div class="bg-orb bg-orb-c"></div>
     <div class="bg-sweep"></div>
     <div class="bg-grain"></div>
+    <canvas class="cursor-particles" data-cursor-particles></canvas>
   </div>
 
   <a class="skip-link" href="#main">跳到主要内容</a>
@@ -3123,6 +3148,179 @@
         });
       }
     }
+    /* ============================================================
+       指针粒子拖尾
+       - 指针移动时留下细颗粒，随时间衰减、轻微下沉并向外扩散
+       - 只在指针活动时跑 rAF，静止后自动停帧，不空转
+       - 触屏 / 减少动效 / 离开视口时不启用
+       ============================================================ */
+    const initCursorDust = () => {
+      const canvas = document.querySelector("[data-cursor-particles]");
+      if (!canvas) return;
+
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+      const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
+      if (reduceMotion.matches || !finePointer.matches) return;
+
+      const ctx = canvas.getContext("2d", { alpha: true });
+      if (!ctx) return;
+
+      let dpr = 1;
+      let width = 0;
+      let height = 0;
+
+      // 从 CSS 变量读粒子色，主题切换后自动跟随
+      let palette = [[255, 178, 202], [255, 214, 178], [178, 202, 255]];
+      const readPalette = () => {
+        const cs = getComputedStyle(document.documentElement);
+        const pick = (name, fallback) => {
+          const raw = cs.getPropertyValue(name).trim();
+          const parts = raw.split(",").map((n) => Number.parseFloat(n));
+          return parts.length === 3 && parts.every((n) => Number.isFinite(n)) ? parts : fallback;
+        };
+        palette = [
+          pick("--dust-core", [255, 178, 202]),
+          pick("--dust-warm", [255, 214, 178]),
+          pick("--dust-cool", [178, 202, 255])
+        ];
+      };
+      readPalette();
+
+      const resize = () => {
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        width = canvas.clientWidth;
+        height = canvas.clientHeight;
+        canvas.width = Math.round(width * dpr);
+        canvas.height = Math.round(height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, width, height);
+      };
+      resize();
+
+      const MAX = 220;          // 上限，防止快速划动时堆积
+      const particles = [];
+      let pointerX = 0;
+      let pointerY = 0;
+      let lastX = 0;
+      let lastY = 0;
+      let hasPointer = false;
+      let frame = 0;
+      let idleFrames = 0;
+
+      const spawn = (x, y, speed) => {
+        if (particles.length >= MAX) particles.shift();
+        const angle = Math.random() * Math.PI * 2;
+        // 速度越快撒得越开，静止时也仍有极少量微尘
+        const spread = Math.min(speed * 0.06, 1.5);
+        const drift = Math.random() * spread;
+        const roll = Math.random();
+        const color = roll < 0.62 ? palette[0] : roll < 0.84 ? palette[1] : palette[2];
+        particles.push({
+          x, y,
+          vx: Math.cos(angle) * drift,
+          vy: Math.sin(angle) * drift * 0.6 - 0.12,   // 略微上浮，像星尘
+          r: 0.7 + Math.random() * 1.9,
+          life: 1,
+          decay: 0.012 + Math.random() * 0.016,
+          color,
+          spark: Math.random() < 0.12                    // 少量亮点，带呼吸闪光
+        });
+      };
+
+      const step = () => {
+        frame = 0;
+        ctx.clearRect(0, 0, width, height);
+
+        // 指针快速移动时按插值补点，避免高速划过留下断线
+        if (hasPointer) {
+          const dx = pointerX - lastX;
+          const dy = pointerY - lastY;
+          const dist = Math.hypot(dx, dy);
+          if (dist > 0.5) {
+            const steps = Math.min(Math.ceil(dist / 6), 9);
+            for (let i = 1; i <= steps; i++) {
+              spawn(lastX + (dx * i) / steps, lastY + (dy * i) / steps, dist);
+            }
+            lastX = pointerX;
+            lastY = pointerY;
+            idleFrames = 0;
+          } else {
+            // 指针停住：只在前 400ms 内零星飘出几粒，随后彻底安静，
+            // 否则粒子会一直补充，拖尾永远淡不掉。
+            idleFrames++;
+            if (idleFrames < 24 && idleFrames % 8 === 0) spawn(pointerX, pointerY, 0);
+          }
+        }
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+          p.life -= p.decay;
+          if (p.life <= 0) { particles.splice(i, 1); continue; }
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vx *= 0.965;
+          p.vy = p.vy * 0.965 - 0.004;      // 缓慢下沉
+          p.r *= 0.988;
+
+          const eased = p.life * p.life;
+          let alpha = eased * 0.72;
+          if (p.spark) alpha *= 0.75 + Math.sin(p.life * 34) * 0.25;
+          const [r, g, b] = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`;
+          ctx.fill();
+        }
+
+        idleFrames++;
+        // 没有粒子且指针没动 → 停帧，别空转
+        if (particles.length) {
+          frame = requestAnimationFrame(step);
+        } else {
+          ctx.clearRect(0, 0, width, height);
+        }
+      };
+
+      const start = () => { if (!frame) frame = requestAnimationFrame(step); };
+
+      window.addEventListener("pointermove", (event) => {
+        if (event.pointerType !== "mouse") return;
+        const x = event.clientX;
+        const y = event.clientY;
+        if (!hasPointer) {
+          // 首次出现时直接落位，避免从 (0,0) 连出一条线
+          lastX = x;
+          lastY = y;
+          canvas.classList.add("is-active");
+        }
+        pointerX = x;
+        pointerY = y;
+        hasPointer = true;
+        idleFrames = 0;
+        start();
+      }, { passive: true });
+
+      window.addEventListener("pointerleave", () => {
+        hasPointer = false;
+        canvas.classList.remove("is-active");
+      }, { passive: true });
+
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) {
+          hasPointer = false;
+          canvas.classList.remove("is-active");
+        }
+      });
+
+      window.addEventListener("resize", resize, { passive: true });
+
+      // 主题切换时重新读色板
+      const themeObserver = new MutationObserver(readPalette);
+      themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    };
+
+    initCursorDust();
+
   </script>
 </body>
 </html>
