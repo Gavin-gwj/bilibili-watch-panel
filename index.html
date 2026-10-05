@@ -1362,15 +1362,40 @@
       content: "";
       background: var(--line-strong);
     }
+
     .measurement-layout {
       display: grid;
       grid-template-columns: minmax(280px, 0.66fr) minmax(0, 1.34fr);
       gap: clamp(48px, 8vw, 128px);
+      align-items: start;
     }
 
+    /* 「每一条记录，都能展开到这一层。」原在右列最底部，现移到标题段落下方。
+       用 order 把它排到最后一行，再让它跨满整幅 ——
+       这样标题与正文仍占左列、产品特性列表仍在右列，位置尺寸都不变。 */
+    .measurement-layout > .sticky-heading {
+      order: 1;
+    }
+
+    .measurement-layout > .measurement-sheet {
+      order: 2;
+    }
+
+    .measurement-layout > .detail-frame {
+      order: 3;
+      grid-column: 1 / -1;
+      align-self: start;
+      margin-top: 0;
+    }
+
+    /* 左列现在承载「截图 + 说明」两列内容，需要更宽的可用空间，
+       否则 .detail-frame 的 248px 截图 + 文字会被压扁。 */
+
     .sticky-heading {
-      position: sticky;
-      top: 120px;
+      /* 标题下方现在挂着 .detail-frame，「截图 + 说明」两列布局需要足够宽度，
+         靠 0.66fr 的窄列塞不下。它改为跨满整个网格，因此这里不再 sticky ——
+         否则整块会吸顶挡住右列。 */
+      position: static;
       align-self: start;
     }
 
@@ -1383,7 +1408,12 @@
 
     .measurement-sheet {
       min-width: 0;
+      grid-column: 2 / 3;
+      grid-row: 1 / 2;
     }
+
+    /* 左列现在承载「截图 + 说明」两列内容，需要更宽的可用空间，
+       否则 .detail-frame 的 248px 截图 + 文字会被压扁。 */
 
     .measurement-row {
       display: grid;
@@ -2047,7 +2077,28 @@
 
       .measurement-layout,
       .privacy-layout {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr !important;
+      }
+
+      /* 单列布局下没有第 2 列可跨，grid-column / grid-row 必须复位，
+         否则 .detail-frame 会退化成极窄的一小列（实测最窄 63px）。
+         同时必须复位 order —— 桌面端的 order 会在单列网格里制造隐式列，
+         让 grid-template-columns: 1fr 失效。顺序改由 DOM 保证：
+         .sticky-heading → .detail-frame → .measurement-sheet 需要重排，
+         所以这里用 order 把 sheet 放到最后。 */
+      .measurement-layout > .detail-frame {
+        grid-column: auto;
+        order: 2;
+      }
+
+      .measurement-layout > .measurement-sheet {
+        grid-row: auto;
+        grid-column: auto;
+        order: 3;
+      }
+
+      .measurement-layout > .sticky-heading {
+        order: 1;
       }
 
       .sticky-heading {
@@ -2521,6 +2572,17 @@
           <p class="section-copy" data-i18n="records.copy">常见的时间统计会把暂停、缓冲和切后台也算进去。这里的每一秒都来自播放器的真实推进，记录方式可以被解释，也可以被验证。</p>
         </div>
 
+        <figure class="detail-frame reveal">
+          <div class="detail-frame-media">
+            <img src="docs/screenshots/panel-detail.png" alt="单条观看记录详情面板示例画面">
+          </div>
+          <figcaption>
+            <span class="detail-frame-code">Record detail</span>
+            <strong data-i18n="records.detail.title">每一条记录，都能展开到这一层。</strong>
+            <p data-i18n="records.detail.copy">总观看时长、最高进度、完播状态、播放会话数、中断率、暂停 / 切后台 / 跳转次数，以及首次与最近观看时间，都保存在同一条本地记录里。</p>
+          </figcaption>
+        </figure>
+
         <div class="measurement-sheet">
           <article class="measurement-row reveal">
             <div class="measurement-index">Play stream</div>
@@ -2557,17 +2619,6 @@
             <div class="timeline-step">Resume</div>
             <div class="timeline-step">Ended</div>
           </div>
-
-          <figure class="detail-frame reveal">
-            <div class="detail-frame-media">
-              <img src="docs/screenshots/panel-detail.png" alt="单条观看记录详情面板示例画面">
-            </div>
-            <figcaption>
-              <span class="detail-frame-code">Record detail</span>
-              <strong data-i18n="records.detail.title">每一条记录，都能展开到这一层。</strong>
-              <p data-i18n="records.detail.copy">总观看时长、最高进度、完播状态、播放会话数、中断率、暂停 / 切后台 / 跳转次数，以及首次与最近观看时间，都保存在同一条本地记录里。</p>
-            </figcaption>
-          </figure>
         </div>
       </div>
 
