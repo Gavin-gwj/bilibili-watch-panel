@@ -86,6 +86,15 @@
       --measure: "Bahnschrift Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
       --ease: cubic-bezier(0.16, 1, 0.3, 1);
       --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+      --ease-inout: cubic-bezier(0.45, 0, 0.55, 1);
+
+      /* 背景动效：光晕颜色、扫光强度与噪点浓度 */
+      --aura-a: rgba(255, 92, 138, 0.16);
+      --aura-b: rgba(122, 92, 255, 0.13);
+      --aura-c: rgba(64, 168, 200, 0.11);
+      --aura-sweep: rgba(255, 255, 255, 0.035);
+      --sweep-peak: 0.85;
+      --grain-opacity: 0.16;
       --gutter: clamp(20px, 5vw, 88px);
       --section-gap: clamp(112px, 15vw, 216px);
     }
@@ -162,6 +171,14 @@
       --ring-a: rgba(255, 92, 138, 0.12);
       --ring-b: rgba(214, 40, 98, 0.2);
       --ring-c: rgba(214, 40, 98, 0.44);
+
+      /* 白天主题：光晕减弱、扫光转冷、噪点更淡，避免白底发脏 */
+      --aura-a: rgba(255, 92, 138, 0.1);
+      --aura-b: rgba(122, 92, 255, 0.07);
+      --aura-c: rgba(64, 168, 200, 0.07);
+      --aura-sweep: rgba(255, 255, 255, 0.5);
+      --sweep-peak: 0.5;
+      --grain-opacity: 0.055;
     }
 
     *,
@@ -172,21 +189,123 @@
 
     html {
       scroll-behavior: smooth;
-      background: var(--ink);
+      background:
+        radial-gradient(circle at 82% 12%, var(--glow-a), transparent 24rem),
+        var(--ink);
     }
 
     body {
       margin: 0;
       min-width: 320px;
       color: var(--enamel);
-      background:
-        radial-gradient(circle at 82% 12%, var(--glow-a), transparent 24rem),
-        var(--ink);
+      /* 底色交给 html，body 保持透明，动效层才能透出来 */
+      background: transparent;
       font-family: var(--ui);
       font-size: 16px;
       line-height: 1.7;
       text-rendering: optimizeLegibility;
       -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── 背景动效层 ──────────────────────────────────────────────
+       固定铺满视口、置于内容之下，不参与滚动、不拦截指针事件。
+       三层叠加：漂浮光晕 → 缓慢扫过的光带 → 细颗粒噪点。   */
+    .bg-motion {
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      overflow: hidden;
+      pointer-events: none;
+      contain: strict;
+    }
+
+    /* 第一层：三团柔和光晕，各自以不同周期漂移，避免同步感 */
+    .bg-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(60px);
+      will-change: transform;
+    }
+
+    .bg-orb-a {
+      top: -14rem;
+      right: -8rem;
+      width: 46rem;
+      height: 46rem;
+      background: radial-gradient(circle, var(--aura-a), transparent 68%);
+      animation: orb-drift-a 34s var(--ease-inout) infinite alternate;
+    }
+
+    .bg-orb-b {
+      top: 38%;
+      left: -16rem;
+      width: 38rem;
+      height: 38rem;
+      background: radial-gradient(circle, var(--aura-b), transparent 70%);
+      animation: orb-drift-b 46s var(--ease-inout) infinite alternate;
+    }
+
+    .bg-orb-c {
+      right: 6%;
+      bottom: -18rem;
+      width: 42rem;
+      height: 42rem;
+      background: radial-gradient(circle, var(--aura-c), transparent 70%);
+      animation: orb-drift-c 56s var(--ease-inout) infinite alternate;
+    }
+
+    /* 第二层：一条极淡的光带自左下向右上缓慢扫过 */
+    .bg-sweep {
+      position: absolute;
+      inset: -20%;
+      background: linear-gradient(
+        104deg,
+        transparent 38%,
+        var(--aura-sweep) 50%,
+        transparent 62%
+      );
+      animation: sweep-slide 26s var(--ease-inout) infinite;
+    }
+
+    /* 第三层：噪点颗粒，让大面积纯色有细微质感 + 极慢位移 */
+    .bg-grain {
+      position: absolute;
+      inset: -50%;
+      opacity: var(--grain-opacity);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+      animation: grain-shift 8s steps(6) infinite;
+    }
+
+    @keyframes orb-drift-a {
+      from { transform: translate3d(0, 0, 0) scale(1); }
+      to   { transform: translate3d(-9rem, 7rem, 0) scale(1.16); }
+    }
+
+    @keyframes orb-drift-b {
+      from { transform: translate3d(0, 0, 0) scale(1.08); }
+      to   { transform: translate3d(11rem, -6rem, 0) scale(0.92); }
+    }
+
+    @keyframes orb-drift-c {
+      from { transform: translate3d(0, 0, 0) scale(0.94); }
+      to   { transform: translate3d(-7rem, -9rem, 0) scale(1.12); }
+    }
+
+    @keyframes sweep-slide {
+      0%   { transform: translate3d(-32%, 0, 0); opacity: 0; }
+      18%  { opacity: var(--sweep-peak); }
+      50%  { transform: translate3d(32%, 0, 0); opacity: var(--sweep-peak); }
+      82%  { opacity: 0; }
+      100% { transform: translate3d(32%, 0, 0); opacity: 0; }
+    }
+
+    @keyframes grain-shift {
+      0%   { transform: translate3d(0, 0, 0); }
+      20%  { transform: translate3d(-3%, 2%, 0); }
+      40%  { transform: translate3d(2%, -3%, 0); }
+      60%  { transform: translate3d(-2%, -2%, 0); }
+      80%  { transform: translate3d(3%, 1%, 0); }
+      100% { transform: translate3d(0, 0, 0); }
     }
 
     body::after {
@@ -1864,6 +1983,14 @@
   </style>
 </head>
 <body>
+  <div class="bg-motion" aria-hidden="true">
+    <div class="bg-orb bg-orb-a"></div>
+    <div class="bg-orb bg-orb-b"></div>
+    <div class="bg-orb bg-orb-c"></div>
+    <div class="bg-sweep"></div>
+    <div class="bg-grain"></div>
+  </div>
+
   <a class="skip-link" href="#main">跳到主要内容</a>
 
   <header class="site-header">
