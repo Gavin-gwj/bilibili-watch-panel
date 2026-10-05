@@ -17,6 +17,8 @@
 </p>
 
 <p align="center">
+  <a href="https://gavin-gwj.github.io/bilibili-watch-panel/">在线预览</a> ·
+  <a href="https://bilibili-watch-panel.liuyigavin2025.workers.dev">Cloudflare 备用地址</a> ·
   <a href="./bilibili-watch-panel.user.js">查看用户脚本</a> ·
   <a href="./CHANGELOG.md">版本记录</a>
 </p>
@@ -41,29 +43,43 @@ Bilibili Watch Panel 是一个**纯本地运行的 Tampermonkey 用户脚本**�
 
 ## 界面一览
 
+> 下面的截图都取自本机浏览器的演示记录，数值为**示例数据**，仅用于说明界面结构。
+
 <table>
   <tr>
     <td width="50%" valign="top">
-      <h3>今日 · 现在的观看状态</h3>
       <img src="./docs/screenshots/panel-today.png" alt="今日数据面板">
-      <p>查看今日总时长、视频数、较昨日变化、观看质量和播放会话状态。</p>
+      <h3>今日：现在的观看状态</h3>
+      <p>今日总时长、视频数量、较昨日变化，以及完播率、平均进度、重复观看与播放会话状态。</p>
     </td>
     <td width="50%" valign="top">
-      <h3>本周 · 一周观看节奏</h3>
       <img src="./docs/screenshots/panel-week.png" alt="本周数据面板">
-      <p>查看近 7 / 30 天趋势、连续观看天数、质量指标和本周洞察。</p>
+      <h3>本周：一周的观看节奏</h3>
+      <p>近 7 / 30 天趋势、连续观看天数、环比变化、质量指标与本周洞察。</p>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <h3>全部 · 长期观看档案</h3>
       <img src="./docs/screenshots/panel-all.png" alt="全部数据面板">
-      <p>查看累计数据、近一年热力图，并搜索或筛选完整观看记录。</p>
+      <h3>全部：长期观看档案</h3>
+      <p>累计时长、视频总数、覆盖 UP 主、近一年热力图，以及可搜索筛选的完整记录。</p>
     </td>
     <td width="50%" valign="top">
-      <h3>报告 · 一页式周报</h3>
       <img src="./docs/screenshots/panel-report.png" alt="本周使用报告">
-      <p>把本周总览、最爱 UP 主和每日时长整理成适合保存的报告卡片。</p>
+      <h3>报告：一页式周报</h3>
+      <p>把本周总览、最爱 UP 主 Top5、每日时长与高峰时段整理成一张适合保存的报告。</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="./docs/screenshots/panel-detail.png" alt="单条观看记录详情">
+      <h3>详情：单条记录展开</h3>
+      <p>点开任意一条记录，查看总观看时长、最高进度、完播状态、播放会话、暂停与跳转次数。</p>
+    </td>
+    <td width="50%" valign="top">
+      <h3>在这些截图中可以看到</h3>
+      <p>列表、指标卡、趋势图、热力图与详情抽屉共用同一套设计令牌与浅灰工作台配色，切换视图时整块面板会一起更新，而不是只替换某一张卡片。</p>
+      <p>截图中的秒数、占比与视频标题都来自演示记录，不代表任何真实用户的使用水平，也不作为产品效果承诺。</p>
     </td>
   </tr>
 </table>

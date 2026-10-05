@@ -24,3 +24,6 @@ node_modules/
 # 本地浏览器验收产物（仅合成数据）
 .playwright-cli/
 output/playwright/
+
+# Wrangler 本地缓存（含账号 ID，不提交）
+.wrangler/
