@@ -54,6 +54,21 @@
       --inset-hi: rgba(255, 255, 255, 0.07);
       --scrollbar: #3c4041;
       --meta-dim: #65645f;
+
+      /* 面板表面：卡片/容器的底色与投影，深色主题下与 steel 接近，
+         浅色主题下靠「纯白表面 + 冷灰底」拉开层级 */
+      --surface: var(--steel);
+      --surface-soft: var(--steel-2);
+      --surface-line: var(--line-strong);
+      --surface-ink: var(--paper-ink);
+      --surface-veil: var(--cream);
+      --preview-ground: var(--paper);
+      --elev-1: 0 1px 2px var(--shadow-1), 0 8px 20px -12px var(--shadow-2);
+      --elev-2: 0 2px 4px var(--shadow-1), 0 18px 40px -20px var(--shadow-3);
+      --elev-3: 0 4px 8px var(--shadow-1), 0 34px 68px -28px var(--shadow-4);
+
+      --signal-ground: var(--signal);
+      --signal-ground-hi: var(--signal-soft);
       --signal-ink: #130c0f;
       --signal-soft: #ff789f;
       --signal-text: #ffb2ca;
@@ -70,57 +85,83 @@
       --ui: "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC", sans-serif;
       --measure: "Bahnschrift Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
       --ease: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
       --gutter: clamp(20px, 5vw, 88px);
       --section-gap: clamp(112px, 15vw, 216px);
     }
 
-    /* 浅色主题：白天用 */
+    /* 浅色主题：白天用。以「日光下的暖白纸面」为基调，
+       底色偏中性米白（去掉原来的黄调），面板纯白浮起，
+       层级同时靠底色差、描边与柔和投影三层表达。 */
     html[data-theme="light"] {
       color-scheme: light;
 
-      --ink: #f7f4ec;
+      /* 底色与面板 */
+      --ink: #f4f2ee;
       --steel: #ffffff;
-      --steel-2: #f0ece1;
-      --enamel: #17181b;
-      --muted: #5d615c;
-      --line: rgba(23, 24, 27, 0.14);
-      --line-strong: rgba(23, 24, 27, 0.26);
+      --steel-2: #eceae4;
+      --enamel: #14161a;
+      --muted: #5a5d66;
+      --line: rgba(20, 22, 26, 0.12);
+      --line-strong: rgba(20, 22, 26, 0.2);
 
-      --veil: rgba(247, 244, 236, 0.92);
-      --wash: rgba(23, 24, 27, 0.05);
-      --fill-1: rgba(23, 24, 27, 0.022);
-      --fill-2: rgba(23, 24, 27, 0.045);
-      --fill-3: rgba(23, 24, 27, 0.07);
-      --edge-1: rgba(23, 24, 27, 0.09);
-      --edge-2: rgba(23, 24, 27, 0.16);
-      --edge-3: rgba(23, 24, 27, 0.24);
-      --edge-soft: rgba(23, 24, 27, 0.14);
-      --hairline: rgba(23, 24, 27, 0.05);
-      --cream: rgba(23, 24, 27, 0.86);
+      /* 叠层：交互面用冷调微灰，避免和暖白底打架 */
+      --veil: rgba(244, 242, 238, 0.9);
+      --wash: rgba(20, 22, 26, 0.038);
+      --fill-1: rgba(20, 22, 26, 0.028);
+      --fill-2: rgba(20, 22, 26, 0.052);
+      --fill-3: rgba(20, 22, 26, 0.08);
+      --edge-1: rgba(20, 22, 26, 0.08);
+      --edge-2: rgba(20, 22, 26, 0.14);
+      --edge-3: rgba(20, 22, 26, 0.22);
+      --edge-soft: rgba(20, 22, 26, 0.11);
+      --hairline: rgba(20, 22, 26, 0.045);
+      --cream: rgba(20, 22, 26, 0.82);
+
+      /* 面板骨架：纯白为主，靠极浅的灰阶区分上下端 */
       --bezel: #ffffff;
       --bezel-hi: #ffffff;
-      --bezel-mid: #f7f4ec;
-      --bezel-lo: #f2eee4;
-      --bezel-flat: #faf8f2;
-      --recess: linear-gradient(180deg, rgba(23, 24, 27, 0.012), transparent);
-      --shadow-1: rgba(23, 24, 27, 0.1);
-      --shadow-2: rgba(23, 24, 27, 0.12);
-      --shadow-3: rgba(23, 24, 27, 0.13);
-      --shadow-4: rgba(23, 24, 27, 0.16);
-      --inset-hi: rgba(255, 255, 255, 0.7);
-      --scrollbar: #c4bfb2;
-      --meta-dim: #6f6b62;
+      --bezel-mid: #fdfcfa;
+      --bezel-lo: #f7f6f3;
+      --bezel-flat: #fbfaf8;
+      --recess: linear-gradient(180deg, rgba(20, 22, 26, 0.014), transparent);
+
+      /* 投影：加大扩散与浓度，让卡片真正浮起来 */
+      --shadow-1: rgba(20, 22, 26, 0.07);
+      --shadow-2: rgba(20, 22, 26, 0.09);
+      --shadow-3: rgba(20, 22, 26, 0.12);
+      --shadow-4: rgba(20, 22, 26, 0.17);
+      --inset-hi: rgba(255, 255, 255, 0.9);
+      --scrollbar: #cfccc4;
+
+      /* 次级文字：暖灰，不与主色冲突 */
+      --meta-dim: #7b7d84;
+
+      /* 面板表面：纯白卡片浮在冷灰底上，投影更柔更长 */
+      --surface: #ffffff;
+      --surface-soft: #fbfaf8;
+      --surface-line: rgba(20, 22, 26, 0.075);
+      --surface-ink: #14161a;
+      --surface-veil: rgba(255, 255, 255, 0.82);
+      --preview-ground: #eceae4;
+      --elev-1: 0 1px 2px var(--shadow-1), 0 10px 24px -14px var(--shadow-2);
+      --elev-2: 0 2px 5px var(--shadow-1), 0 22px 48px -22px var(--shadow-3);
+      --elev-3: 0 4px 10px var(--shadow-1), 0 40px 80px -30px var(--shadow-4);
+
+      /* 信号色：浅底上加深，白字才压得住 */
+      --signal-ground: #d6245f;
+      --signal-ground-hi: #c01a52;
       --signal-ink: #ffffff;
-      --signal-soft: #e8437a;
-      --signal-text: #b9184f;
-      --signal-text-hi: #a3144a;
-      --glow-a: rgba(255, 92, 138, 0.1);
-      --glow-b: rgba(255, 92, 138, 0.12);
-      --glow-c: rgba(255, 92, 138, 0.16);
-      --glow-d: rgba(217, 43, 104, 0.42);
-      --ring-a: var(--glow-c);
-      --ring-b: rgba(255, 92, 138, 0.24);
-      --ring-c: rgba(217, 43, 104, 0.5);
+      --signal-soft: #f0507e;
+      --signal-text: #c01a52;
+      --signal-text-hi: #a3154a;
+      --glow-a: rgba(255, 92, 138, 0.07);
+      --glow-b: rgba(255, 92, 138, 0.09);
+      --glow-c: rgba(255, 92, 138, 0.13);
+      --glow-d: rgba(214, 40, 98, 0.34);
+      --ring-a: rgba(255, 92, 138, 0.12);
+      --ring-b: rgba(214, 40, 98, 0.2);
+      --ring-c: rgba(214, 40, 98, 0.44);
     }
 
     *,
@@ -197,8 +238,9 @@
     }
 
     :focus-visible {
-      outline: 2px solid var(--signal);
+      outline: 2px solid var(--signal-text);
       outline-offset: 4px;
+      border-radius: 3px;
     }
 
     img {
@@ -256,7 +298,7 @@
       color: var(--ink);
       background: var(--signal);
       transform: translateY(-160%);
-      transition: transform 180ms ease;
+      transition: transform 180ms var(--ease-out);
     }
 
     .skip-link:focus {
@@ -332,11 +374,13 @@
 
     .site-nav a {
       position: relative;
-      padding: 24px 0 21px;
+      min-width: 44px;
+      padding: 24px 6px 21px;
       color: var(--muted);
       font-size: 0.84rem;
+      text-align: center;
       text-decoration: none;
-      transition: color 180ms ease;
+      transition: color 180ms var(--ease-out);
     }
 
     .site-nav a::after {
@@ -388,7 +432,7 @@
       font-weight: 650;
       letter-spacing: 0.04em;
       white-space: nowrap;
-      transition: border-color 180ms ease, background-color 180ms ease, color 180ms ease, transform 220ms var(--ease);
+      transition: border-color 180ms var(--ease-out), background-color 180ms var(--ease-out), color 180ms var(--ease-out), transform 220ms var(--ease);
     }
 
     .site-nav .gh-link::after,
@@ -477,7 +521,7 @@
       background: none;
       font: inherit;
       cursor: pointer;
-      transition: color 180ms ease, background-color 180ms ease;
+      transition: color 180ms var(--ease-out), background-color 180ms var(--ease-out);
     }
 
     .pref-btn:hover {
@@ -493,7 +537,7 @@
     .pref-icon {
       width: 17px;
       height: 17px;
-      transition: opacity 200ms ease, transform 260ms var(--ease);
+      transition: opacity 200ms var(--ease-out), transform 260ms var(--ease);
     }
 
     /* 深色主题显示月亮，浅色主题显示太阳 */
@@ -588,7 +632,7 @@
       border-radius: 10px;
       font-weight: 700;
       text-decoration: none;
-      transition: color 180ms ease, background 180ms ease, border-color 180ms ease, transform 180ms var(--ease);
+      transition: color 180ms var(--ease-out), background 180ms var(--ease-out), border-color 180ms var(--ease-out), box-shadow 180ms var(--ease-out), transform 180ms var(--ease);
     }
 
     .button:hover {
@@ -600,22 +644,27 @@
     }
 
     .button-primary {
+      border-color: transparent;
       color: var(--signal-ink);
-      background: var(--signal);
+      background: var(--signal-ground);
+      box-shadow: 0 1px 2px var(--shadow-2), 0 12px 26px -12px var(--glow-d);
     }
 
     .button-primary:hover {
-      background: var(--signal-soft);
+      background: var(--signal-ground-hi);
+      box-shadow: 0 2px 5px var(--shadow-2), 0 18px 34px -14px var(--glow-d);
     }
 
     .button-secondary {
-      border-color: var(--line-strong);
+      border-color: var(--surface-line);
       color: var(--enamel);
-      background: transparent;
+      background: var(--surface);
+      box-shadow: var(--elev-1);
     }
 
     .button-secondary:hover {
       border-color: var(--signal);
+      color: var(--signal-text);
     }
 
     .hero-meta {
@@ -656,10 +705,11 @@
       position: absolute;
       inset: 24px -16px -24px 22px;
       z-index: -1;
-      border: 1px solid var(--line);
+      border: 1px solid var(--surface-line);
       border-radius: 16px;
       content: "";
       background: var(--bezel);
+      box-shadow: var(--elev-2);
       transform: rotate(1.6deg);
     }
 
@@ -668,13 +718,14 @@
       --my: 18%;
       position: relative;
       overflow: hidden;
-      border: 1px solid var(--line-strong);
+      border: 1px solid var(--surface-line);
       border-radius: 14px;
       background:
         radial-gradient(circle at var(--mx) var(--my), var(--fill-3), transparent 16rem),
         linear-gradient(145deg, var(--bezel-hi) 0%, var(--bezel-mid) 45%, var(--bezel-lo) 100%);
+      box-shadow: var(--elev-3);
       transform: rotate(-1.1deg);
-      transition: transform 600ms var(--ease), border-color 300ms ease;
+      transition: transform 600ms var(--ease), border-color 300ms var(--ease-out), box-shadow 600ms var(--ease);
     }
 
     .departure-board:hover {
@@ -808,9 +859,9 @@
       width: 100%;
       max-width: 420px;
       overflow: hidden;
-      border: 1px solid var(--edge-soft);
+      border: 1px solid var(--surface-line);
       border-radius: 14px;
-      background: var(--paper);
+      background: var(--preview-ground);
       aspect-ratio: 379 / 500;
       box-shadow:
         0 30px 64px var(--shadow-3),
@@ -842,7 +893,7 @@
       object-fit: cover;
       object-position: top center;
       transform: translateY(0);
-      transition: opacity 380ms ease, transform 700ms var(--ease);
+      transition: opacity 380ms var(--ease-out), transform 700ms var(--ease);
     }
 
     .preview-slot.is-changing img {
@@ -855,13 +906,16 @@
       right: 12px;
       bottom: 12px;
       z-index: 2;
-      padding: 6px 8px;
-      color: var(--paper-ink);
-      background: var(--cream);
+      padding: 6px 9px;
+      color: var(--surface-ink);
+      background: var(--surface-veil);
+      border: 1px solid var(--surface-line);
+      border-radius: 999px;
       font-family: var(--measure);
       font-size: 0.7rem;
       letter-spacing: 0.1em;
       text-transform: uppercase;
+      backdrop-filter: blur(6px);
     }
 
     .board-rail {
@@ -881,15 +935,16 @@
       justify-content: flex-end;
       gap: 4px;
       padding: 3px;
-      border: 1px solid var(--line);
+      border: 1px solid var(--surface-line);
       border-radius: 10px;
       background: var(--fill-1);
+      box-shadow: var(--elev-1);
     }
 
     .view-tab {
       position: relative;
-      min-height: 28px;
-      padding: 0 12px;
+      min-height: 32px;
+      padding: 0 14px;
       border: 0;
       border-radius: 8px;
       color: var(--muted);
@@ -900,6 +955,14 @@
       letter-spacing: 0.09em;
       cursor: pointer;
       transition: color 200ms var(--ease), background-color 200ms var(--ease), transform 200ms var(--ease);
+    }
+
+    /* 移动端放大点按区域，避免误触 */
+    @media (max-width: 1180px) {
+      .view-tab {
+        min-height: 34px;
+        padding: 0 14px;
+      }
     }
 
     .view-tab::after {
@@ -926,7 +989,8 @@
 
     .view-tab[aria-selected="true"] {
       color: var(--enamel);
-      background: var(--glow-c);
+      background: var(--surface);
+      box-shadow: var(--elev-1);
     }
 
     .view-tab[aria-selected="true"]::after {
@@ -1214,11 +1278,12 @@
       position: relative;
       min-height: 430px;
       padding: 38px;
-      border: 1px solid var(--line-strong);
+      border: 1px solid var(--surface-line);
       border-radius: 14px;
       background:
         linear-gradient(90deg, transparent 49.8%, var(--hairline) 50%, transparent 50.2%),
-        var(--steel);
+        var(--surface);
+      box-shadow: var(--elev-2);
     }
 
     .route-line {
@@ -1257,9 +1322,10 @@
       display: grid;
       min-height: 138px;
       padding: 22px 18px;
-      border: 1px solid var(--line-strong);
+      border: 1px solid var(--surface-line);
       border-radius: 10px;
-      background: var(--ink);
+      background: var(--surface);
+      box-shadow: var(--elev-1);
       align-content: center;
       text-align: center;
     }
@@ -1358,10 +1424,11 @@
     .destination-plate {
       display: grid;
       grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
-      border: 1px solid var(--line-strong);
+      border: 1px solid var(--surface-line);
       border-radius: 14px;
       overflow: hidden;
-      background: var(--steel);
+      background: var(--surface);
+      box-shadow: var(--elev-2);
     }
 
     .destination-main {
@@ -1467,9 +1534,13 @@
     }
 
     .footer-links a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 0 2px;
       color: var(--muted);
       text-decoration-color: transparent;
-      transition: color 180ms ease, text-decoration-color 180ms ease;
+      transition: color 180ms var(--ease-out), text-decoration-color 180ms var(--ease-out);
     }
 
     .footer-links a:hover {
@@ -1481,7 +1552,7 @@
       opacity: 0;
       clip-path: inset(0 0 18% 0);
       transform: translateY(26px);
-      transition: opacity 700ms ease, clip-path 900ms var(--ease), transform 900ms var(--ease);
+      transition: opacity 700ms var(--ease-out), clip-path 900ms var(--ease), transform 900ms var(--ease);
     }
 
     .reveal.is-visible {
@@ -1560,8 +1631,11 @@
         height: 34px;
       }
 
+      /* 点按目标至少 32x32，符合移动端可用性基线 */
       .pref-btn {
-        width: 32px;
+        width: 34px;
+        min-height: 34px;
+        height: 34px;
       }
 
       .pref-icon {
@@ -1705,11 +1779,13 @@
       }
 
       .pref-group {
-        height: 32px;
+        height: 34px;
       }
 
+      /* 触控目标保持 ≥32px 见方 */
       .pref-btn {
-        width: 30px;
+        width: 34px;
+        height: 34px;
       }
 
       .pref-lang-mark {
