@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="./docs/assets/banner.png?v=20261005-plugin" alt="Bilibili Watch Panel 项目封面">
+</p>
+
+<p align="center">
   <strong>Bilibili Watch Panel</strong><br>
   本地优先的 B 站观看数据统计与可视化 Tampermonkey 用户脚本
 </p>
@@ -61,10 +65,10 @@ Bilibili Watch Panel 是一个运行在 B 站页面上的 Tampermonkey 用户脚
 
 ## 界面预览
 
-下面的横幅展示了插件面板的主要视图。在线展示页只是项目的可视化演示，不是数据服务端；观看记录始终保存在当前浏览器中。
+下面的总览图展示了插件面板的主要视图。在线展示页只是项目的可视化演示，不是数据服务端；观看记录始终保存在当前浏览器中。
 
 <p align="center">
-  <img src="./docs/assets/banner.png?v=20261005-plugin" alt="Bilibili Watch Panel 插件界面预览">
+  <img src="./docs/assets/overview.png?v=20261005-plugin" alt="Bilibili Watch Panel 五个界面总览">
 </p>
 
 面板包含四个主要视图：
