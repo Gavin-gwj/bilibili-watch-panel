@@ -15,6 +15,9 @@
       --signal: #ff5c8a;
       --signal-deep: #d92b68;
       --route: #8aa878;
+      /* 图表/边框用的路线绿偏亮，直接当正文色在浅底上只有 2.3:1，
+         故另给一个可作文字用的深绿 */
+      --route-text: #8aa878;
 
       /* 面板/纸面底色：两个主题共用（截图与周报的浅色底） */
       --paper: #f3efe5;
@@ -53,7 +56,8 @@
       --shadow-4: rgba(0, 0, 0, 0.6);
       --inset-hi: rgba(255, 255, 255, 0.07);
       --scrollbar: #3c4041;
-      --meta-dim: #65645f;
+      /* 弱化说明文字：需在各自页面上达到 4.5:1，用于分组标题/状态徽标/底部元信息 */
+      --meta-dim: #8b8a83;
 
       /* 面板表面：卡片/容器的底色与投影，深色主题下与 steel 接近，
          浅色主题下靠「纯白表面 + 冷灰底」拉开层级 */
@@ -63,6 +67,9 @@
       --surface-ink: var(--paper-ink);
       --surface-veil: var(--cream);
       --preview-ground: var(--paper);
+      /* 票根面板底色是浅色（两种主题都是），其上的弱化文字需用冷灰深色，
+         不能跟随 --meta-dim（那是在深色页面上用的）。 */
+      --preview-meta: #5c5f66;
       --elev-1: 0 1px 2px var(--shadow-1), 0 8px 20px -12px var(--shadow-2);
       --elev-2: 0 2px 4px var(--shadow-1), 0 18px 40px -20px var(--shadow-3);
       --elev-3: 0 4px 8px var(--shadow-1), 0 34px 68px -28px var(--shadow-4);
@@ -73,6 +80,12 @@
       --signal-soft: #ff789f;
       --signal-text: #ffb2ca;
       --signal-text-hi: #ffc9d9;
+      /* 焦点环：内圈粉 + 外圈页面底色光晕，保证在任何底色上都可见 */
+      --focus-ring: #ffb2ca;
+      --focus-halo: rgba(8, 9, 10, 0.92);
+      /* 粉底按钮（深色主题的 #ff5c8a 很亮）上，白环最高只能到 2.94:1，
+         改用页面近黑的深环才能过 3:1 */
+      --focus-on-signal: #0b0c0e;
       --glow-a: rgba(255, 92, 138, 0.09);
       --glow-b: rgba(255, 92, 138, 0.11);
       --glow-c: rgba(255, 92, 138, 0.14);
@@ -147,7 +160,8 @@
       --scrollbar: #cfccc4;
 
       /* 次级文字：暖灰，不与主色冲突 */
-      --meta-dim: #7b7d84;
+      --meta-dim: #6a6d76;
+      --route-text: #4f6b3f;
 
       /* 面板表面：纯白卡片浮在冷灰底上，投影更柔更长 */
       --surface: #ffffff;
@@ -156,6 +170,7 @@
       --surface-ink: #14161a;
       --surface-veil: rgba(255, 255, 255, 0.82);
       --preview-ground: #eceae4;
+      --preview-meta: #5c5f66;
       --elev-1: 0 1px 2px var(--shadow-1), 0 10px 24px -14px var(--shadow-2);
       --elev-2: 0 2px 5px var(--shadow-1), 0 22px 48px -22px var(--shadow-3);
       --elev-3: 0 4px 10px var(--shadow-1), 0 40px 80px -30px var(--shadow-4);
@@ -167,6 +182,10 @@
       --signal-soft: #f0507e;
       --signal-text: #c01a52;
       --signal-text-hi: #a3154a;
+      /* 焦点环：浅底上用深莓红，外圈光晕用页面底色 */
+      --focus-ring: #c01a52;
+      --focus-halo: rgba(244, 242, 238, 0.94);
+      --focus-on-signal: #ffffff;
       --glow-a: rgba(255, 92, 138, 0.07);
       --glow-b: rgba(255, 92, 138, 0.09);
       --glow-c: rgba(255, 92, 138, 0.13);
@@ -359,9 +378,12 @@
       font: inherit;
     }
 
+    /* 焦点环：内圈用与底色无关的粉，外圈再补一圈与页面底同色的描边，
+       这样无论落在深底、浅底还是粉色按钮上，总有一圈能看清。 */
     :focus-visible {
-      outline: 2px solid var(--signal-text);
-      outline-offset: 4px;
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 3px;
+      box-shadow: 0 0 0 5px var(--focus-halo);
       border-radius: 3px;
     }
 
@@ -419,14 +441,22 @@
       left: 14px;
       z-index: 100;
       padding: 10px 14px;
-      color: var(--ink);
-      background: var(--signal);
+      color: var(--signal-ink);
+      background: var(--signal-ground);
       transform: translateY(-160%);
       transition: transform 180ms var(--ease-out);
     }
 
     .skip-link:focus {
       transform: translateY(0);
+    }
+
+    /* 自身就是粉底的元素：粉色焦点环压在粉底上看不清，
+       改用页面底色的实心环（深底上用浅环、浅底上用深环） */
+    .skip-link:focus-visible,
+    .button-primary:focus-visible {
+      outline-color: var(--focus-on-signal);
+      box-shadow: none;
     }
 
     .site-header {
@@ -633,7 +663,7 @@
 
     .site-nav .gh-link:focus-visible,
     .site-nav .nav-install:focus-visible {
-      outline: 2px solid var(--enamel);
+      outline: 2px solid var(--focus-ring);
       outline-offset: 3px;
     }
 
@@ -669,7 +699,7 @@
     }
 
     .pref-btn:focus-visible {
-      outline: 2px solid var(--enamel);
+      outline: 2px solid var(--focus-ring);
       outline-offset: 2px;
     }
 
@@ -895,7 +925,7 @@
     .board-title svg {
       width: 19px;
       height: 19px;
-      color: var(--signal);
+      color: var(--signal-text);
     }
 
     .board-body {
@@ -915,7 +945,7 @@
 
     .board-destination {
       margin-bottom: 8px;
-      color: var(--signal);
+      color: var(--signal-text);
       font-family: var(--measure);
       font-size: 0.73rem;
       letter-spacing: 0.15em;
@@ -969,7 +999,7 @@
       align-items: center;
       gap: 10px;
       margin-top: 22px;
-      color: var(--route);
+      color: var(--route-text);
       font-family: var(--measure);
       font-size: 0.7rem;
       letter-spacing: 0.12em;
@@ -1215,7 +1245,7 @@
     }
 
     .measurement-index {
-      color: var(--signal);
+      color: var(--signal-text);
       font-family: var(--measure);
       font-size: 0.72rem;
       letter-spacing: 0.14em;
@@ -1292,7 +1322,7 @@
     }
 
     .timeline-step.is-live {
-      color: var(--signal);
+      color: var(--signal-text);
     }
 
     .timeline-step.is-live::before {
@@ -1347,7 +1377,7 @@
     .detail-frame-code {
       display: block;
       margin-bottom: 14px;
-      color: var(--signal);
+      color: var(--signal-text);
       font-family: var(--measure);
       font-size: 0.72rem;
       letter-spacing: 0.15em;
@@ -1470,7 +1500,7 @@
     }
 
     .route-node-code {
-      color: var(--route);
+      color: var(--route-text);
       font-family: var(--measure);
       font-size: 0.7rem;
       letter-spacing: 0.13em;
@@ -1544,7 +1574,7 @@
 
     .privacy-fact strong {
       display: block;
-      color: var(--signal);
+      color: var(--signal-text);
       font-family: var(--measure);
       font-size: 1.25rem;
       font-variant-numeric: tabular-nums;
@@ -1611,7 +1641,7 @@
     }
 
     .destination-code {
-      color: var(--meta-dim);
+      color: var(--preview-meta);
       font-family: var(--measure);
       font-size: 0.7rem;
       letter-spacing: 0.13em;
@@ -1641,53 +1671,194 @@
     }
 
     .destination-meta span {
-      color: var(--meta-dim);
+      color: var(--preview-meta);
     }
 
+    /* 页脚：作为「终点站」，复刻主区的时间表语言。
+       结构 = 品牌块 + 链接区（含小标题）+ 底部条（分隔线 + 版权/状态）。 */
     .website-footer {
-      padding: 34px 0 44px;
+      position: relative;
+      padding: clamp(52px, 6vw, 84px) 0 32px;
       border-top: 1px solid var(--line);
     }
 
-    .footer-inner {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 32px;
+    /* 顶部一道极淡的粉色起始线，呼应顶栏的 brand 下划线 */
+    .website-footer::before {
+      position: absolute;
+      top: -1px;
+      left: var(--gutter);
+      width: 96px;
+      height: 1px;
+      content: "";
+      background: linear-gradient(90deg, var(--signal), transparent);
+      opacity: 0.7;
     }
 
-    .footer-copy {
-      max-width: 48rem;
+    .footer-inner {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+      gap: clamp(40px, 6vw, 96px);
+      align-items: start;
+    }
+
+    /* ---- 品牌块 ---- */
+    .footer-brand {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 18px;
+      font-family: var(--display);
+      font-size: 1.22rem;
+      letter-spacing: -0.01em;
+    }
+
+    .footer-brand .footer-brand-mark {
+      color: var(--signal-text);
+      font-family: var(--measure);
+      font-size: 0.7rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
     }
 
     .footer-copy p {
+      max-width: 34rem;
       margin: 0;
-      font-size: 0.78rem;
-      line-height: 1.7;
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.85;
+      text-wrap: pretty;
     }
 
+    /* 状态点：本地运行中 */
+    .footer-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 20px;
+      padding: 5px 11px 5px 9px;
+      border: 1px solid var(--edge-1);
+      border-radius: 999px;
+      background: var(--fill-1);
+      color: var(--meta-dim);
+      font-family: var(--measure);
+      font-size: 0.68rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .footer-status::before {
+      width: 6px;
+      height: 6px;
+      content: "";
+      border-radius: 50%;
+      background: #6fbf73;
+      box-shadow: 0 0 0 3px rgba(111, 191, 115, 0.16);
+    }
+
+    /* ---- 链接区 ---- */
     .footer-links {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-      gap: 12px 22px;
-      font-size: 0.78rem;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 26px 32px;
+    }
+
+    .footer-col-title {
+      margin-bottom: 12px;
+      color: var(--meta-dim);
+      font-family: var(--measure);
+      font-size: 0.66rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .footer-col ul {
+      display: grid;
+      gap: 2px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
     }
 
     .footer-links a {
       display: inline-flex;
       align-items: center;
+      gap: 6px;
       min-height: 32px;
-      padding: 0 2px;
       color: var(--muted);
-      text-decoration-color: transparent;
-      transition: color 180ms var(--ease-out), text-decoration-color 180ms var(--ease-out);
+      font-size: 0.8rem;
+      text-decoration: none;
+      transition: color 180ms var(--ease-out);
     }
 
-    .footer-links a:hover {
-      color: var(--enamel);
-      text-decoration-color: var(--signal);
+    /* 链接前的小箭头：hover 时向右微移 */
+    .footer-links a::before {
+      color: var(--signal-text);
+      content: "→";
+      font-family: var(--measure);
+      font-size: 0.82rem;
+      opacity: 0;
+      transform: translateX(-4px);
+      transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
     }
+
+    .footer-links a:hover,
+    .footer-links a:focus-visible {
+      color: var(--enamel);
+    }
+
+    .footer-links a:hover::before,
+    .footer-links a:focus-visible::before {
+      opacity: 1;
+      transform: none;
+    }
+
+    .footer-links a:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 3px;
+      border-radius: 3px;
+    }
+
+    /* ---- 底部条 ---- */
+    .footer-base {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px 28px;
+      margin-top: clamp(40px, 5vw, 64px);
+      padding-top: 22px;
+      border-top: 1px solid var(--line);
+      color: var(--meta-dim);
+      font-family: var(--measure);
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .footer-base-list {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px 20px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .footer-base-list li {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* 列表项之间的细分隔符 */
+    .footer-base-list li + li::before {
+      width: 1px;
+      height: 11px;
+      content: "";
+      background: var(--line-strong);
+    }
+
 
     .reveal {
       opacity: 0;
@@ -1884,15 +2055,31 @@
       }
 
       .footer-inner {
-        flex-direction: column;
-      }
-
-      .footer-links {
-        justify-content: flex-start;
+        grid-template-columns: 1fr;
+        gap: 40px;
       }
     }
 
     @media (max-width: 560px) {
+      /* 手机上链接区回到两列，但字号收紧；底部条改为纵向堆叠 */
+      .footer-links {
+        gap: 22px 20px;
+      }
+
+      .footer-links a {
+        font-size: 0.76rem;
+      }
+
+      .footer-base {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      .footer-base-list li + li::before {
+        display: none;
+      }
+
       .brand-text span {
         display: none;
       }
@@ -2288,14 +2475,40 @@
   <footer class="website-footer shell">
     <div class="footer-inner">
       <div class="footer-copy">
+        <div class="footer-brand">
+          <span>Bilibili Watch Panel</span>
+          <span class="footer-brand-mark">Local record</span>
+        </div>
         <p data-i18n="footer.copy">Bilibili Watch Panel 是一个纯本地运行的 Tampermonkey 用户脚本。页面截图中的数据来自本机浏览器示例，仅用于展示界面。</p>
+        <span class="footer-status" data-i18n="footer.status">本地运行 · 无服务器</span>
       </div>
+
       <nav class="footer-links" aria-label="页脚导航" data-i18n-aria-label="footer.aria">
-        <a href="https://github.com/Gavin-gwj/bilibili-watch-panel">GitHub</a>
-        <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.9.1">Release</a>
-        <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/blob/main/CHANGELOG.md">CHANGELOG</a>
-        <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/blob/main/LICENSE">MIT License</a>
+        <div class="footer-col">
+          <div class="footer-col-title" data-i18n="footer.colProject">项目</div>
+          <ul>
+            <li><a href="https://github.com/Gavin-gwj/bilibili-watch-panel">GitHub</a></li>
+            <li><a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.9.1">Release v0.9.1</a></li>
+            <li><a href="https://github.com/Gavin-gwj/bilibili-watch-panel/blob/main/CHANGELOG.md">CHANGELOG</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <div class="footer-col-title" data-i18n="footer.colDocs">说明</div>
+          <ul>
+            <li><a href="https://github.com/Gavin-gwj/bilibili-watch-panel#readme" data-i18n="footer.readme">使用说明</a></li>
+            <li><a href="https://github.com/Gavin-gwj/bilibili-watch-panel/blob/main/LICENSE">MIT License</a></li>
+          </ul>
+        </div>
       </nav>
+    </div>
+
+    <div class="footer-base">
+      <p>© 2025 Bilibili Watch Panel</p>
+      <ul class="footer-base-list">
+        <li data-i18n="footer.metaRuntime">Tampermonkey</li>
+        <li data-i18n="footer.metaStorage">本地存储</li>
+        <li>v0.9.1</li>
+      </ul>
     </div>
   </footer>
   <script>
@@ -2466,6 +2679,12 @@
         "install.m3v": "无",
         "install.m4": "版本",
         "footer.copy": "Bilibili Watch Panel 是一个纯本地运行的 Tampermonkey 用户脚本。页面截图中的数据来自本机浏览器示例，仅用于展示界面。",
+        "footer.status": "本地运行 · 无服务器",
+        "footer.colProject": "项目",
+        "footer.colDocs": "说明",
+        "footer.readme": "使用说明",
+        "footer.metaRuntime": "Tampermonkey",
+        "footer.metaStorage": "本地存储",
         "footer.aria": "页脚导航"
       },
       en: {
@@ -2558,6 +2777,12 @@
         "install.m3v": "None",
         "install.m4": "Version",
         "footer.copy": "Bilibili Watch Panel is a Tampermonkey userscript that runs entirely locally. The data in the page screenshots comes from a sample browser on this machine and is shown only to illustrate the interface.",
+        "footer.status": "Runs locally · no server",
+        "footer.colProject": "Project",
+        "footer.colDocs": "Docs",
+        "footer.readme": "Getting started",
+        "footer.metaRuntime": "Tampermonkey",
+        "footer.metaStorage": "Local storage",
         "footer.aria": "Footer navigation"
       }
     };
