@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.9.0"><img src="https://img.shields.io/badge/version-0.9.0-fb7299" alt="version"></a>
+  <a href="https://github.com/Gavin-gwj/bilibili-watch-panel/releases/tag/v0.9.1"><img src="https://img.shields.io/badge/version-0.9.1-fb7299" alt="version"></a>
   <img src="https://img.shields.io/badge/Tampermonkey-compatible-4a90d9" alt="Tampermonkey compatible">
   <img src="https://img.shields.io/badge/storage-local--only-6c757d" alt="local only">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license">
@@ -160,6 +160,7 @@ B站页面公开信息
 | --- | --- |
 | 数据存在哪里？ | 只在本机浏览器的 Tampermonkey 扩展存储中，仓库和服务器都收不到。 |
 | 为什么时长比实际看的少？ | 脚本只统计 `video.currentTime` 的真实推进；暂停、卡顿、缓冲和切后台不计入。 |
+| 为什么拖动进度条没有增加「重复观看」？ | 只有回退到本次已看过的片段并继续播放才计一次；手动向前跳转、跳到没看过的位置不计入。 |
 | 如何迁移到新设备？ | 在旧设备导出 JSON，在新设备安装脚本后使用「导入 JSON」合并。 |
 | B 站改版后没有数据怎么办？ | 页面选择器集中在脚本的 `SELECTORS` 常量区，可针对改版更新选择器。 |
 | 浏览器缩放后按钮不见了怎么办？ | v0.7.1 已加入视口重定位逻辑；刷新页面后按钮会自动回到当前可视区域。 |

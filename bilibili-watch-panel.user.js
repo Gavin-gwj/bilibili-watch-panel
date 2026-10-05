@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili Watch Panel
 // @namespace    https://github.com/Gavin-gwj/bilibili-watch-panel
-// @version      0.9.0
+// @version      0.9.1
 // @description  本地B站观看数据统计与可视化面板
 // @author       Gavin-gwj
 // @match        https://*.bilibili.com/*
@@ -62,6 +62,8 @@
     SAVE_THROTTLE_MS: 15000,
     /** 单次心跳最多累加的秒数，防止标签页休眠后虚增 */
     MAX_TICK_SECONDS: 10,
+    /** 判定「重复观看」所需的最小已观看重叠秒数，避免边界抖动误判 */
+    REWATCH_MIN_SECONDS: 1,
     /** 视频信息 API 兜底请求超时（毫秒） */
     API_TIMEOUT_MS: 6000,
     /** 存储 key 统一定义 */
@@ -353,6 +355,48 @@
     if (!Number.isFinite(lastCurrentTime) || !Number.isFinite(currentTime) || currentTime <= lastCurrentTime) return 0;
     const elapsed = Math.max(0, (Number(now) - Number(lastTickAt)) / 1000);
     return Math.min(elapsed, CONFIG.MAX_TICK_SECONDS);
+  }
+
+  /**
+   * 把 [from, to) 并入已观看区间表，保持有序并合并重叠/相邻区间。
+   * 区间表只在当前页面会话内存在，用于判断是否回看已看过片段。
+   */
+  function addWatchedRange(ranges, from, to) {
+    const list = Array.isArray(ranges) ? ranges : [];
+    const start = Math.max(0, Math.min(Number(from), Number(to)));
+    const end = Math.max(0, Math.max(Number(from), Number(to)));
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end - start <= 0) return list;
+
+    const merged = [];
+    let s = start;
+    let e = end;
+    let inserted = false;
+    for (let i = 0; i < list.length; i++) {
+      const r = list[i];
+      if (r.end < s) { merged.push(r); continue; }
+      if (r.start > e) {
+        if (!inserted) { merged.push({ start: s, end: e }); inserted = true; }
+        merged.push(r);
+        continue;
+      }
+      s = Math.min(s, r.start);
+      e = Math.max(e, r.end);
+    }
+    if (!inserted) merged.push({ start: s, end: e });
+    list.length = 0;
+    for (let i = 0; i < merged.length; i++) list.push(merged[i]);
+    return list;
+  }
+
+  /** 某个时间点是否落在已观看区间内，用于判断回退落点 */
+  function isTimeWatched(ranges, at) {
+    const list = Array.isArray(ranges) ? ranges : [];
+    const t = Number(at);
+    if (!Number.isFinite(t)) return false;
+    for (let i = 0; i < list.length; i++) {
+      if (t >= list[i].start - 0.5 && t < list[i].end) return true;
+    }
+    return false;
   }
 
   /** 清洗单条记录，坏数据返回 null */
@@ -988,9 +1032,14 @@
     /** 上次心跳时的播放进度（秒），用于按实际推进量计时 */
 
     _lastCurrentTime: NaN,
+    /** 当前页面会话内已观看区间（秒），用于识别真实回看 */
+    _watchedRanges: [],
+    /** 最近一次已知播放位置（秒），seeking 时用它判断是向前还是向后跳 */
+    _lastKnownTime: NaN,
+    /** 本次回退跳转是否已经计入重复观看，避免一个片段反复累加 */
+    _pendingRewatch: false,
     /** 是否已经记录过本次打开 */
     opened: false,
-    playCountedForCurrentPlay: false,
     _timer: null,
     _bound: false,
     /** 当前会话标识（URL + bvid），避免守护定时器重复重启 */
@@ -1023,8 +1072,10 @@
       this.lastTickAt = Date.now();
       this.lastSaveAt = 0;
       this.opened = false;
-      this.playCountedForCurrentPlay = false;
       this._lastCurrentTime = NaN;
+      this._watchedRanges = [];
+      this._lastKnownTime = NaN;
+      this._pendingRewatch = false;
       this._sessionKey = location.pathname + location.search;
 
       const self = this;
@@ -1076,7 +1127,6 @@
       document.addEventListener('play', function () {
         const v = self.videoEl || document.querySelector('video');
         self.videoEl = v;
-        self.playCountedForCurrentPlay = false;
         self.beginSession();
         self.lastTickAt = Date.now();
         self._lastCurrentTime = v && Number.isFinite(v.currentTime) ? v.currentTime : NaN;
@@ -1100,12 +1150,27 @@
       }, true);
       document.addEventListener('seeking', function () {
         if (self.currentSession) self.currentSession.seekCount += 1;
+        const v = self.videoEl || document.querySelector('video');
+        const from = Number.isFinite(self._lastKnownTime)
+          ? self._lastKnownTime
+          : (v && Number.isFinite(v.currentTime) ? v.currentTime : NaN);
+        const to = v && Number.isFinite(v.currentTime) ? v.currentTime : NaN;
+        // 拖动过程中会连续触发 seeking，每次都以拖动前的位置重新判定，只认最终落点
+        self._pendingRewatch = false;
+        // 只有「向后跳」且落点位于已观看区间，才可能在真正播放后被认定是一次重复观看
+        if (Number.isFinite(from) && Number.isFinite(to) && to < from - CONFIG.REWATCH_MIN_SECONDS
+          && isTimeWatched(self._watchedRanges, to)) {
+          self._pendingRewatch = true;
+        }
+        // 记录拖动过程中的当前位置，下一次 seeking 以它为新起点，从而只认最终落点
+        if (Number.isFinite(to)) self._lastKnownTime = to;
         self._lastCurrentTime = NaN;
         self.canAccumulate = false;
       }, true);
       document.addEventListener('seeked', function () {
         const v = self.videoEl || document.querySelector('video');
         self.videoEl = v;
+        self._lastKnownTime = v && Number.isFinite(v.currentTime) ? v.currentTime : NaN;
         self._lastCurrentTime = v && Number.isFinite(v.currentTime) ? v.currentTime : NaN;
         self.lastTickAt = Date.now();
         self.canAccumulate = !!(v && !v.paused && !v.ended && !self._buffering && !document.hidden);
@@ -1117,7 +1182,6 @@
       document.addEventListener('playing', function () {
         const v = self.videoEl || document.querySelector('video');
         self.videoEl = v;
-        if (!self.currentSession) self.playCountedForCurrentPlay = false;
         self.beginSession();
         self.lastTickAt = Date.now();
         self._lastCurrentTime = v && Number.isFinite(v.currentTime) ? v.currentTime : NaN;
@@ -1136,7 +1200,6 @@
           self.settleTick();
           if (self.currentSession) self.currentSession.backgroundCount += 1;
           self.endSession('hidden', Date.now());
-          self.playCountedForCurrentPlay = false;
           self.canAccumulate = false;
           self.flush(true);
         } else {
@@ -1145,7 +1208,6 @@
           const v = self.videoEl || document.querySelector('video');
           self.videoEl = v;
           if (v && !v.paused && !v.ended && !self._buffering) {
-            self.playCountedForCurrentPlay = false;
             self.beginSession();
           }
           self.canAccumulate = !!(v && !v.paused && !v.ended && !self._buffering);
@@ -1192,10 +1254,13 @@
         seekCount: 0,
         endReason: 'unknown',
       };
-      if (this.videoInfo && !this.playCountedForCurrentPlay) {
-        this.recordPlaySession();
-        this.playCountedForCurrentPlay = true;
-      }
+      this.ensureOpened();
+    },
+
+    /** 当前页面会话内首次真实播放时记一次「打开」，只创建记录，不计重复观看。 */
+    ensureOpened() {
+      if (this.opened) return;
+      this.recordOpen();
     },
 
     /** 结束当前会话；重复触发 pagehide/beforeunload 时保持幂等。 */
@@ -1256,8 +1321,8 @@
       log('已记录打开', date, this.videoInfo.mediaKey);
     },
 
-    /** 记录一次从暂停到播放的有效播放会话。 */
-    recordPlaySession() {
+    /** 记录一次真实重复观看：playCount +1（面板「重看」显示 playCount - 1）。 */
+    recordRewatch() {
       if (!this.videoInfo || !this.videoInfo.mediaKey) return;
       const date = todayStr();
       const records = Store.getRecords();
@@ -1299,6 +1364,7 @@
       }
       if (video && Number.isFinite(video.currentTime)) {
         this.pendingMaxPosition = Math.max(this.pendingMaxPosition, video.currentTime);
+        this._lastKnownTime = video.currentTime;
         this.updateDuration(video);
         this.checkCompletion(video, false);
       }
@@ -1331,25 +1397,28 @@
         if (!Number.isFinite(this._lastCurrentTime)) {
           this.beginSession();
           this._lastCurrentTime = Number.isFinite(video.currentTime) ? video.currentTime : NaN;
+          this._lastKnownTime = this._lastCurrentTime;
           this.lastTickAt = now;
-          if (!this.playCountedForCurrentPlay) {
-            this.recordPlaySession();
-            this.playCountedForCurrentPlay = true;
-          }
           return;
         }
         const delta = activeWatchSeconds(now, this.lastTickAt, this._lastCurrentTime, video.currentTime);
         this.lastTickAt = now;
         this.beginSession();
-        if (!this.playCountedForCurrentPlay) {
-          this.recordPlaySession();
-          this.playCountedForCurrentPlay = true;
+        // 只在播放进度真实前进时更新已观看区间；往回拖或原地不动都不算新观看
+        if (Number.isFinite(video.currentTime) && video.currentTime > this._lastCurrentTime) {
+          // 回退到已观看区间后继续播放，才认定为一次真实重复观看
+          if (this._pendingRewatch) {
+            this._pendingRewatch = false;
+            this.recordRewatch();
+          }
+          addWatchedRange(this._watchedRanges, this._lastCurrentTime, video.currentTime);
         }
         this.pendingSeconds += delta;
         if (this.currentSession) this.currentSession.watchedSeconds += delta;
         this.pendingMaxPosition = Math.max(this.pendingMaxPosition, Number(video.currentTime) || 0);
         this.checkCompletion(video, delta > 0);
         this._lastCurrentTime = video.currentTime;
+        this._lastKnownTime = video.currentTime;
         log('心跳累加 +' + delta.toFixed(1) + 's，待写入 ' + this.pendingSeconds.toFixed(1) + 's');
 
         if (now - this.lastSaveAt >= CONFIG.SAVE_THROTTLE_MS) this.flush(false);
@@ -3846,7 +3915,7 @@
     safe(function () {
       Store.initSchema();
       wrapHistory();
-      log('脚本已加载，版本 0.9.0', location.href);
+      log('脚本已加载，版本 0.9.1', location.href);
 
       // 阶段 3：仅视频页启用采集（SPA 路由切换由守护定时器处理）
       safe(function () { ensureCollector(); }, 'ensureCollector');

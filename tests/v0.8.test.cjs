@@ -124,6 +124,6 @@ test('近30天统计只读取一次主记录', () => {
 test('用户脚本不增加权限或外部依赖', () => {
   const cp=require('node:child_process'); const base=cp.execFileSync('git',['show','HEAD:bilibili-watch-panel.user.js'],{encoding:'utf8',cwd:path.join(__dirname,'..')});
   const meta=s=>s.split(/\r?\n/).filter(l=>/^\/\/ @(grant|require|match)\s/.test(l)); assert.deepEqual(meta(source),meta(base));
-  assert.match(source,/@version\s+0\.9\.0/);
+  assert.match(source,/@version\s+0\.9\.1/);
 });
 console.log(`\n${checks} tests passed`);
