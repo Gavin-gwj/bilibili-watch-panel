@@ -170,7 +170,8 @@
       --scrollbar: #cfccc4;
 
       /* 次级文字：暖灰，不与主色冲突 */
-      --meta-dim: #6a6d76;
+      /* 5.71:1 on --ink —— 小字号（.footer-status 10.9px）在浅色下也稳过 4.5 */
+      --meta-dim: #5c5f67;
       --route-text: #4f6b3f;
 
       /* 面板表面：纯白卡片浮在冷灰底上，投影更柔更长 */
@@ -293,7 +294,9 @@
       animation: orb-drift-c 56s var(--ease-inout) infinite alternate;
     }
 
-    /* 第二层：一条极淡的光带自左下向右上缓慢扫过 */
+    /* 第二层：一条极淡的光带自左下向右上扫过一次后停住。
+       刻意不做 infinite —— 无限循环的背景光带既是被探测器判为
+       「跑马灯」的生成式签名，也让合成层永远无法进入空闲。 */
     .bg-sweep {
       position: absolute;
       inset: -20%;
@@ -303,16 +306,18 @@
         var(--aura-sweep) 50%,
         transparent 62%
       );
-      animation: sweep-slide 26s var(--ease-inout) infinite;
+      animation: sweep-slide 26s var(--ease-inout) 1 both;
     }
 
-    /* 第三层：噪点颗粒，让大面积纯色有细微质感 + 极慢位移 */
+    /* 第三层：噪点颗粒，让大面积纯色有细微质感 + 极慢位移。
+       位移幅度极小且用 steps() 离散化，但仍然常驻合成层，
+       所以只保留一次循环，避免长期占用 GPU。 */
     .bg-grain {
       position: absolute;
       inset: -50%;
       opacity: var(--grain-opacity);
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
-      animation: grain-shift 8s steps(6) infinite;
+      animation: grain-shift 8s steps(6) 1 both;
     }
 
     /* 第四层：跟随指针的粒子拖尾
@@ -869,12 +874,14 @@
       border-color: transparent;
       color: var(--signal-ink);
       background: var(--signal-ground);
-      box-shadow: 0 1px 2px var(--shadow-2), 0 12px 26px -12px var(--glow-d);
+      /* 中性投影，不用彩色辉光 —— 粉色光晕是「生成式 UI」的默认观感，
+         与 DESIGN.md 的克制造型相悖；按钮的强调已经由实心粉底承担 */
+      box-shadow: 0 1px 2px var(--shadow-2), 0 10px 22px -14px var(--shadow-4);
     }
 
     .button-primary:hover {
       background: var(--signal-ground-hi);
-      box-shadow: 0 2px 5px var(--shadow-2), 0 18px 34px -14px var(--glow-d);
+      box-shadow: 0 2px 5px var(--shadow-2), 0 16px 30px -16px var(--shadow-4);
     }
 
     .button-secondary {
@@ -1217,6 +1224,9 @@
       height: 100%;
       object-fit: cover;
       object-position: top center;
+      /* width/height 属性提供内在宽高比以避免布局偏移；
+         真实的盒子尺寸仍由这里的 100% 决定 */
+      max-width: none;
       transform: translateY(0);
       transition: opacity 380ms var(--ease-out), transform 700ms var(--ease);
     }
@@ -1574,6 +1584,7 @@
     .detail-frame-media img {
       width: 100%;
       height: 100%;
+      max-width: none;
       object-fit: cover;
       object-position: top center;
     }
@@ -2609,16 +2620,16 @@
               <div class="board-preview">
                 <div class="preview-deck" id="previewDeck" data-preview-deck role="presentation">
                   <div class="preview-slot" data-preview-slot data-view="report" aria-hidden="true">
-                    <img src="docs/screenshots/panel-report.png" alt="" draggable="false">
+                    <img src="docs/screenshots/panel-report.png" alt="" draggable="false" width="702" height="926" loading="lazy" decoding="async">
                   </div>
                   <div class="preview-slot" data-preview-slot data-view="all" aria-hidden="true">
-                    <img src="docs/screenshots/panel-all.png" alt="" draggable="false">
+                    <img src="docs/screenshots/panel-all.png" alt="" draggable="false" width="699" height="922" loading="lazy" decoding="async">
                   </div>
                   <div class="preview-slot" data-preview-slot data-view="week" aria-hidden="true">
-                    <img src="docs/screenshots/panel-week.png" alt="" draggable="false">
+                    <img src="docs/screenshots/panel-week.png" alt="" draggable="false" width="704" height="929" loading="lazy" decoding="async">
                   </div>
                   <div class="preview-slot is-front" id="previewSlot" data-preview-slot data-view="today">
-                    <img id="boardPreviewImage" src="docs/screenshots/panel-today.png" alt="今日观看数据面板示例画面">
+                    <img id="boardPreviewImage" src="docs/screenshots/panel-today.png" alt="今日观看数据面板示例画面" width="688" height="908" loading="eager" fetchpriority="high" decoding="async">
                     <span class="preview-caption" data-i18n="board.sample">示例数据</span>
                   </div>
                 </div>
@@ -2643,7 +2654,7 @@
 
         <figure class="detail-frame reveal">
           <div class="detail-frame-media">
-            <img src="docs/screenshots/panel-detail.png" alt="单条观看记录详情面板示例画面">
+            <img src="docs/screenshots/panel-detail.png" alt="单条观看记录详情面板示例画面" width="706" height="882" loading="lazy" decoding="async">
           </div>
           <figcaption>
             <span class="detail-frame-code">Record detail</span>
@@ -3241,9 +3252,12 @@
 
       // 图片只在初始化时同步一次：此后每张卡各自持有固定图片，
       // 翻页换的是「哪张卡在最上层」，不再改写 <img src>。
-      if (source === "initial") {
+      // alt 始终同步（无障碍需要），src 只在确有值时同步：
+      // 该 <img> 位于 today 卡内，若从别处进入本视图而它又是 lazy，
+      // 写入同值 src 不保证让浏览器去取图，会出现空白卡面。
+      refs.previewImage.alt = pick(view.alt);
+      if (source === "initial" && view.image && refs.previewImage.getAttribute("src") !== view.image) {
         refs.previewImage.src = view.image;
-        refs.previewImage.alt = pick(view.alt);
       }
 
       flipDeck(key, shouldAnimate);
