@@ -23,6 +23,10 @@
       --route-halo: rgba(138, 168, 120, 0.22);
       /* 卡片 hover 时的极轻提亮，比 --fill-1（0.022）略强一点点 */
       --route-hover: rgba(255, 255, 255, 0.03);
+      /* 卡片 hover 的底色：深色主题下是「提亮一档的白」，
+         浅色主题下必须是「压暗一档的黑」。两种主题不能共用一个值，
+         否则浅色主题会变成白底加白、完全看不出反馈。 */
+      --card-hover: rgba(255, 255, 255, 0.03);
       /* 比 --enamel 更亮一档，专用于「悬停时应被点亮的文字」 */
       --enamel-bright: #fbf8f1;
       /* 断路末端小叉的颜色：读起来要像「关闭」，不能像警告，
@@ -186,9 +190,14 @@
       /* 5.71:1 on --ink —— 小字号（.footer-status 10.9px）在浅色下也稳过 4.5 */
       --meta-dim: #5c5f67;
       --route-text: #4f6b3f;
+      /* 浅底上的路线绿要压深，否则 #8aa878 在白卡上对比度太低。
+         这里和 --route-text 取同一支深绿，保证 hover 边框与
+         「路线」文字在浅色主题下是同一个绿。 */
+      --route: #4f6b3f;
       /* 浅底上光点辉光改用深绿，否则绿色光晕在白纸上看不见 */
       --route-halo: rgba(79, 107, 63, 0.2);
       --route-hover: rgba(20, 22, 26, 0.03);
+      --card-hover: rgba(20, 22, 26, 0.03);
       --enamel-bright: #08090a;
       --status-off: #9a9d9f;
 
@@ -1994,7 +2003,7 @@
          JS 存在时由下面的 .js-motion 规则压回起点再绘制。 */
       transform: translateY(-1px) scaleX(1);
       transform-origin: 0 50%;
-      transition: transform 1400ms var(--ease) 260ms;
+      transition: transform 1400ms var(--ease) 260ms, background-color 300ms var(--ease-out);
     }
 
     /* 评审：连线应有叙事感，进入区块后从左向右逐段绘制。
@@ -2005,6 +2014,14 @@
 
     .js-motion .privacy-route.is-drawn .route-line {
       transform: translateY(-1px) scaleX(1);
+    }
+
+    /* 悬停任一张卡片时，整条连线同步提亮 —— 用 :has 让「路线」成为
+       一个整体反馈：用户碰到某一格，能看出数据是在这条线上流动的。
+       只改背景色不改 transform，避免和上面的绘制动画打架。 */
+    .privacy-route:has(.route-node:hover) .route-line,
+    .privacy-route:has(.route-node:focus-within) .route-line {
+      background: var(--enamel);
     }
 
     /* 箭头随连线末端一起出现 */
@@ -2275,41 +2292,89 @@
       transform: translateY(-50%);
     }
 
+    /* 指标区：三张等宽铭牌。
+       材质刻意与上方三步流程卡片（.route-node）完全一致 ——
+       同一个 --surface-line 细边、同一个 --surface 底色、同一个 --elev-1
+       微内阴影、同一个 10px 圆角。改这里就要同步改 .route-node。 */
     .privacy-facts {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
       margin-top: 34px;
-      border-top: 1px solid var(--line);
     }
 
     .privacy-fact {
-      padding: 20px 18px 0 0;
+      display: grid;
+      align-content: start;
+      gap: 10px;
+      padding: 22px 20px;
+      border: 1px solid var(--surface-line);
+      border-radius: 10px;
+      background: var(--surface);
+      box-shadow: var(--elev-1);
+      transition: border-color 300ms var(--ease-out),
+        background-color 300ms var(--ease-out),
+        box-shadow 300ms var(--ease-out),
+        opacity 620ms var(--ease-out) var(--fact-delay, 0ms),
+        transform 620ms var(--ease-out) var(--fact-delay, 0ms);
     }
 
-    /* 评审：`0` 是核心卖点（零上传请求），需要最大视觉权重。
-       首个指标放大并加亮，后两个保持基准字号，形成明确主次。 */
+    /* 入场：滚动到区块时依次淡入 + 轻微上浮。
+       起点写在 .js-motion 前缀下，无 JS 时卡片直接可见。 */
+    .js-motion .privacy-fact {
+      opacity: 0;
+      transform: translate3d(0, 16px, 0);
+    }
+
+    .js-motion .privacy-facts.is-visible .privacy-fact {
+      opacity: 1;
+      transform: none;
+    }
+
+    .privacy-fact:nth-child(1) { --fact-delay: 0ms; }
+    .privacy-fact:nth-child(2) { --fact-delay: 110ms; }
+    .privacy-fact:nth-child(3) { --fact-delay: 220ms; }
+
+    /* hover：边框提亮、底色微提亮、数字轻微放大。
+       边框用 --route 绿（与上方三步流程卡片完全同一套反馈语言），
+       不用 --ring-c 粉 —— 粉色在本页专属「信号/警示」，一张宣称
+       零上传的卡片闪粉会读成告警。
+       放大用独立的 scale 属性而不是 transform ——
+       transform 已被入场动画占用，两者会互斥。 */
+    .privacy-fact:hover {
+      border-color: var(--route);
+      background: var(--card-hover);
+      box-shadow: var(--elev-2);
+    }
+
+    /* `0` 是核心卖点（零上传请求），给最大视觉权重与粉色；
+       后两个用浅白，形成明确主次。 */
     .privacy-fact strong {
       display: block;
-      color: var(--signal-text);
+      color: var(--enamel);
       font-family: var(--measure);
-      font-size: 1.25rem;
+      font-size: clamp(1.9rem, 3vw, 2.6rem);
       font-variant-numeric: tabular-nums;
-      line-height: 1.05;
-      transition: color 260ms var(--ease-out);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      transform-origin: 0 50%;
+      scale: 1;
+      transition: scale 320ms var(--ease-out), color 300ms var(--ease-out);
     }
 
     .privacy-fact:first-child strong {
-      font-size: clamp(2.1rem, 3.4vw, 2.9rem);
-      letter-spacing: -0.02em;
+      color: var(--signal-text);
     }
 
     .privacy-fact:hover strong {
-      color: var(--signal);
+      scale: 1.02;
     }
 
     .privacy-fact span {
       color: var(--muted);
-      font-size: 0.75rem;
+      font-size: 0.78rem;
+      line-height: 1.6;
     }
 
     /* ---- 预加载 ---- */
@@ -2361,9 +2426,25 @@
       color: var(--muted);
       font-size: 0.82rem;
       line-height: 1.75;
+      transition: border-color 300ms var(--ease-out), color 300ms var(--ease-out),
+        opacity 620ms var(--ease-out) 340ms;
     }
 
-    /* ---- 常见问题 ---- */
+    /* 延迟淡入：排在指标卡片之后，让下半部分有先后层次 */
+    .js-motion .platform-note {
+      opacity: 0;
+    }
+
+    .js-motion .platform-note.is-visible {
+      opacity: 1;
+    }
+
+    .platform-note:hover {
+      border-left-color: var(--signal-text);
+      color: var(--enamel);
+    }
+
+    /* ---- 常见问题（互斥手风琴） ---- */
     .faq {
       margin-top: 46px;
       padding-top: 30px;
@@ -2371,7 +2452,7 @@
     }
 
     .faq-title {
-      margin-bottom: 6px;
+      margin-bottom: 18px;
       font-family: var(--measure);
       font-size: 0.7rem;
       font-weight: 600;
@@ -2381,32 +2462,136 @@
     }
 
     .faq-list {
+      display: grid;
+      gap: 10px;
       margin: 0;
     }
 
+    /* 每一条是独立圆角卡片，材质与指标区、流程卡片一致 */
     .faq-item {
-      padding: 18px 0;
-      border-bottom: 1px solid var(--line);
+      border: 1px solid var(--surface-line);
+      border-radius: 10px;
+      background: var(--surface);
+      box-shadow: var(--elev-1);
+      overflow: hidden;
+      transition: border-color 300ms var(--ease-out),
+        background-color 300ms var(--ease-out),
+        box-shadow 300ms var(--ease-out),
+        opacity 620ms var(--ease-out) var(--faq-delay, 0ms),
+        transform 620ms var(--ease-out) var(--faq-delay, 0ms);
     }
 
-    .faq-item:last-child {
-      border-bottom: 0;
-      padding-bottom: 0;
+    .js-motion .faq-item {
+      opacity: 0;
+      transform: translate3d(0, 14px, 0);
     }
 
-    .faq-item dt {
-      margin-bottom: 8px;
+    .js-motion .faq.is-visible .faq-item {
+      opacity: 1;
+      transform: none;
+    }
+
+    .faq-item:nth-child(1) { --faq-delay: 0ms; }
+    .faq-item:nth-child(2) { --faq-delay: 120ms; }
+    .faq-item:nth-child(3) { --faq-delay: 240ms; }
+
+    .faq-item:hover,
+    .faq-item[data-open="true"] {
+      border-color: var(--route);
+      background: var(--card-hover);
+    }
+
+    .faq-item[data-open="true"] {
+      box-shadow: var(--elev-2);
+    }
+
+    /* 用 button 而不是 dt，键盘与读屏都能直接操作 */
+    .faq-question {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 18px 20px;
+      border: 0;
+      background: none;
+      color: var(--enamel);
       font-size: 0.94rem;
       font-weight: 650;
+      line-height: 1.6;
+      text-align: left;
+      cursor: pointer;
+      transition: color 300ms var(--ease-out);
     }
 
-    .faq-item dd {
+    .faq-question:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: -3px;
+      border-radius: 10px;
+    }
+
+    /* 箭头：一个方框旋转 45 度即成「拐角」，展开时转 180 度成反向拐角 */
+    .faq-caret {
+      flex: none;
+      position: relative;
+      width: 16px;
+      height: 16px;
+      border-right: 1.5px solid var(--muted);
+      border-bottom: 1.5px solid var(--muted);
+      transform: rotate(45deg);
+      transform-origin: 60% 60%;
+      transition: transform 400ms var(--ease-out), border-color 300ms var(--ease-out);
+    }
+
+    .faq-item[data-open="true"] .faq-caret {
+      transform: rotate(225deg);
+      border-color: var(--route);
+    }
+
+    /* 展开动画用 grid-template-rows 的 0fr -> 1fr，
+       而不是 max-height：max-height 是在动布局属性，既有抖动
+       也需要猜一个够大的上限；grid 的行高过渡是浏览器原生支持的
+       收起/展开手法，且不依赖魔法数字。 */
+    .faq-answer {
+      display: grid;
+      grid-template-rows: 0fr;
+      overflow: hidden;
+      transition: grid-template-rows 420ms var(--ease-out);
+    }
+
+    .faq-item[data-open="true"] .faq-answer {
+      grid-template-rows: 1fr;
+    }
+
+    /* grid 的过渡要求子元素自身 min-height 为 0，否则内容会把行撑开。
+       下内边距不能留在 p 上 —— 收起时 0fr 只压掉内容高度，
+       p 的 padding 仍会占位，答案会露出 20px。改由外层给间距。 */
+    .faq-answer > p {
+      min-height: 0;
       margin: 0;
-      max-width: 52ch;
+      padding: 0 20px;
+      max-width: 58ch;
       color: var(--muted);
-      font-size: 0.84rem;
+      font-size: 0.82rem;
       line-height: 1.85;
       text-wrap: pretty;
+      opacity: 0;
+      transition: opacity 340ms var(--ease-out) 90ms;
+    }
+
+    /* 收起时把整块的下内边距也一并收掉，展开时才让出 20px 底距 */
+    .faq-answer {
+      padding-bottom: 0;
+      transition: grid-template-rows 420ms var(--ease-out),
+        padding-bottom 420ms var(--ease-out);
+    }
+
+    .faq-item[data-open="true"] .faq-answer {
+      padding-bottom: 20px;
+    }
+
+    .faq-item[data-open="true"] .faq-answer > p {
+      opacity: 1;
     }
 
     .install {
@@ -3261,8 +3446,21 @@
       }
 
       .privacy-fact {
-        padding-bottom: 16px;
-        border-bottom: 1px solid var(--line);
+        padding: 18px 16px;
+      }
+
+      /* 单列堆叠时数字可以更大一些，充分利用手机宽度 */
+      .privacy-fact strong {
+        font-size: clamp(2rem, 9vw, 2.6rem);
+      }
+
+      .faq-question {
+        padding: 16px 16px;
+        font-size: 0.9rem;
+      }
+
+      .faq-answer p {
+        padding: 0 16px 18px;
       }
 
       .destination-side {
@@ -3337,6 +3535,30 @@
 
       .preloader {
         transition-duration: 0.01ms !important;
+      }
+
+      /* 下半部分的入场一律直接呈现终态，手风琴也不再滑动 */
+      .privacy-fact,
+      .platform-note,
+      .faq-item,
+      .faq-answer,
+      .faq-answer p {
+        opacity: 1 !important;
+        transform: none !important;
+        transition: none !important;
+      }
+
+      /* 收起状态在 reduce 下仍需真正隐藏，否则答案会一直露着 */
+      .faq-item:not([data-open="true"]) .faq-answer {
+        grid-template-rows: 0fr !important;
+      }
+
+      .faq-item:not([data-open="true"]) .faq-answer > p {
+        opacity: 0 !important;
+      }
+
+      .faq-caret {
+        transition: none !important;
       }
 
       .reveal {
@@ -3693,25 +3915,40 @@
 
           <!-- 评审：前置风险提示放在隐私区之后，用户决定安装前一定能看到 -->
           <p class="platform-note" data-i18n="privacy.platformNote">
-            仅支持 PC 端 Chrome / Edge 等可安装 Tampermonkey 的浏览器，移动端浏览器无法运行。
+            仅支持PC端 Chrome / Edge 等可安装 Tampermonkey 的浏览器，移动端暂无法运行脚本。
           </p>
 
           <div class="faq">
             <h3 class="faq-title" data-i18n="faq.title">常见问题</h3>
-            <dl class="faq-list">
+            <div class="faq-list">
               <div class="faq-item">
-                <dt data-i18n="faq.q1">清除浏览器数据会怎样？</dt>
-                <dd data-i18n="faq.a1">观看记录保存在浏览器本地存储里。清除浏览器数据、站点数据或卸载扩展都会一并删除记录，且无法找回。建议定期用面板里的导出功能存一份 JSON 备份。</dd>
+                <button class="faq-question" type="button" aria-expanded="false" aria-controls="faqAnswer1">
+                  <span data-i18n="faq.q1">清除浏览器数据会怎样？</span>
+                  <span class="faq-caret" aria-hidden="true"></span>
+                </button>
+                <div class="faq-answer" id="faqAnswer1">
+                  <p data-i18n="faq.a1">观看记录保存在浏览器本地存储。一旦清除浏览器站点数据、卸载扩展，记录会被直接删除且无法找回。建议定期使用面板导出JSON文件做好备份。</p>
+                </div>
               </div>
               <div class="faq-item">
-                <dt data-i18n="faq.q2">换浏览器或换电脑怎么迁移？</dt>
-                <dd data-i18n="faq.a2">在新环境装好脚本后，用面板里的「导入」选择之前导出的 JSON 文件，记录会按日期合并进去。两台机器的数据不会自动同步，需要手动导入一次。</dd>
+                <button class="faq-question" type="button" aria-expanded="false" aria-controls="faqAnswer2">
+                  <span data-i18n="faq.q2">换浏览器或换电脑怎么迁移？</span>
+                  <span class="faq-caret" aria-hidden="true"></span>
+                </button>
+                <div class="faq-answer" id="faqAnswer2">
+                  <p data-i18n="faq.a2">在新环境装好脚本后，在面板使用「导入」功能，选中之前导出的JSON文件，记录会按日期合并。多台设备数据不会自动同步，需要手动导入迁移。</p>
+                </div>
               </div>
               <div class="faq-item">
-                <dt data-i18n="faq.q3">脚本会上传我的观看数据吗？</dt>
-                <dd data-i18n="faq.a3">不会。脚本只在浏览器里读写本地存储，唯一的外部请求是向 B 站公开接口查询视频标题，不包含任何观看时长或进度信息。</dd>
+                <button class="faq-question" type="button" aria-expanded="false" aria-controls="faqAnswer3">
+                  <span data-i18n="faq.q3">脚本会上传我的观看数据吗？</span>
+                  <span class="faq-caret" aria-hidden="true"></span>
+                </button>
+                <div class="faq-answer" id="faqAnswer3">
+                  <p data-i18n="faq.a3">不会。脚本只会在浏览器本地读写存储。唯一的外部请求是访问B站公开接口获取视频标题，不会上传你的观看时长、播放进度等任何观看记录。</p>
+                </div>
               </div>
-            </dl>
+            </div>
           </div>
         </div>
       </div>
@@ -3929,14 +4166,14 @@
         "privacy.title": "你的观看记录，只存在你的电脑",
         "privacy.copy": "全程在浏览器本地运行，<strong>不上传任何观看数据到外网</strong>。无服务器、无账号，数据控制权完全在你手里。",
         "privacy.routeAria": "本地数据处理路径",
-        "privacy.platformNote": "仅支持 PC 端 Chrome / Edge 等可安装 Tampermonkey 的浏览器，移动端浏览器无法运行。",
+        "privacy.platformNote": "仅支持PC端 Chrome / Edge 等可安装 Tampermonkey 的浏览器，移动端暂无法运行脚本。",
         "faq.title": "常见问题",
         "faq.q1": "清除浏览器数据会怎样？",
-        "faq.a1": "观看记录保存在浏览器本地存储里。清除浏览器数据、站点数据或卸载扩展都会一并删除记录，且无法找回。建议定期用面板里的导出功能存一份 JSON 备份。",
+        "faq.a1": "观看记录保存在浏览器本地存储。一旦清除浏览器站点数据、卸载扩展，记录会被直接删除且无法找回。建议定期使用面板导出JSON文件做好备份。",
         "faq.q2": "换浏览器或换电脑怎么迁移？",
-        "faq.a2": "在新环境装好脚本后，用面板里的「导入」选择之前导出的 JSON 文件，记录会按日期合并进去。两台机器的数据不会自动同步，需要手动导入一次。",
+        "faq.a2": "在新环境装好脚本后，在面板使用「导入」功能，选中之前导出的JSON文件，记录会按日期合并。多台设备数据不会自动同步，需要手动导入迁移。",
         "faq.q3": "脚本会上传我的观看数据吗？",
-        "faq.a3": "不会。脚本只在浏览器里读写本地存储，唯一的外部请求是向 B 站公开接口查询视频标题，不包含任何观看时长或进度信息。",
+        "faq.a3": "不会。脚本只会在浏览器本地读写存储。唯一的外部请求是访问B站公开接口获取视频标题，不会上传你的观看时长、播放进度等任何观看记录。",
         "privacy.server": "不会连接外部服务器上传数据",
         "privacy.replay": "重播数据流",
         "privacy.n1.code": "Source 01",
@@ -4045,11 +4282,11 @@
         "privacy.platformNote": "Runs only on desktop Chrome or Edge with Tampermonkey installed. Mobile browsers cannot run the script.",
         "faq.title": "Frequently asked",
         "faq.q1": "What happens if I clear my browser data?",
-        "faq.a1": "Watch records live in browser local storage. Clearing browser data, site data, or uninstalling the extension deletes them for good. Export a JSON backup from the panel on a regular basis.",
+        "faq.a1": "Watch records live in browser local storage. Clearing browser or site data, or uninstalling the extension, deletes them outright with no way to recover. Export the JSON file from the panel on a regular basis to keep a backup.",
         "faq.q2": "How do I move to another browser or computer?",
-        "faq.a2": "Install the script in the new environment, then use Import in the panel to pick the JSON file you exported earlier. Records merge in by date. The two machines do not sync automatically.",
+        "faq.a2": "Install the script in the new environment, then use Import in the panel and pick the JSON file you exported earlier. Records merge in by date. The two machines never sync on their own, so the import has to be manual.",
         "faq.q3": "Does the script upload my watch data?",
-        "faq.a3": "No. The script only reads and writes local storage in your browser. Its one outbound request asks a public Bilibili endpoint for a video title and carries no duration or progress data.",
+        "faq.a3": "No. The script only reads and writes storage inside your browser. Its one outbound request asks a public Bilibili endpoint for a video title, and it never uploads your watch duration, playback progress, or any other viewing record.",
         "privacy.server": "Never connects to an external server",
         "privacy.replay": "Replay data flow",
         "privacy.n1.code": "Source 01",
@@ -4753,6 +4990,53 @@
           face.addEventListener("click", () => {
             setOpen(face.getAttribute("aria-expanded") !== "true");
           });
+        });
+      });
+    }
+
+    // 下半部分入场：指标卡片、风险提示、FAQ 卡片各自一次。
+    // 三类元素错峰出现，但共用同一套「进视口播放一次就解除观察」的机制。
+    const entranceGroups = [
+      document.querySelectorAll(".privacy-facts"),
+      document.querySelectorAll(".platform-note"),
+      document.querySelectorAll(".faq"),
+    ].filter((group) => group.length);
+
+    if (entranceGroups.length) {
+      if (reduceMotion.matches || !("IntersectionObserver" in window)) {
+        entranceGroups.forEach((group) => group.forEach((el) => el.classList.add("is-visible")));
+      } else {
+        const entranceObserver = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            entry.target.classList.add("is-visible");
+            entranceObserver.unobserve(entry.target);
+          });
+        }, { threshold: 0.14, rootMargin: "0px 0px -6% 0px" });
+        entranceGroups.forEach((group) => group.forEach((el) => entranceObserver.observe(el)));
+      }
+    }
+
+    // 常见问题：互斥手风琴，同一时间只展开一条。
+    // 默认全部收起，点开新的会自动收起旧的。
+    const faqItems = [...document.querySelectorAll(".faq-item")];
+    if (faqItems.length) {
+      const setFaqOpen = (item, open) => {
+        const question = item.querySelector(".faq-question");
+        item.dataset.open = open ? "true" : "false";
+        if (question) question.setAttribute("aria-expanded", String(open));
+      };
+
+      faqItems.forEach((item) => {
+        const question = item.querySelector(".faq-question");
+        if (!question) return;
+        setFaqOpen(item, false);
+
+        question.addEventListener("click", () => {
+          const willOpen = item.dataset.open !== "true";
+          // 先全部收起，再展开目标 —— 互斥的唯一状态源就是 data-open
+          faqItems.forEach((other) => setFaqOpen(other, false));
+          setFaqOpen(item, willOpen);
         });
       });
     }
