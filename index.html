@@ -114,10 +114,13 @@
       /* 五角星（实心），供顶栏 star 数标签的 mask 使用 */
       --star-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2.6l2.95 5.98 6.6.96-4.78 4.66 1.13 6.57L12 17.67l-5.9 3.1 1.13-6.57L2.45 9.54l6.6-.96z'/%3E%3C/svg%3E");
 
-      /* 背景动效：光晕颜色、扫光强度与噪点浓度 */
+      /* 背景动效：光晕颜色、扫光强度与噪点浓度。
+         三枚光晕都取 charcoal / ink / oxidized-steel 家族内的色相，
+         不用紫色 —— 契约要求全页只停留在一个暗色材质里，
+         紫色渐变属于明令禁止项（DESIGN.md 的 Prohibitions 与 One darkened material）。 */
       --aura-a: rgba(255, 92, 138, 0.16);
-      --aura-b: rgba(122, 92, 255, 0.13);
-      --aura-c: rgba(64, 168, 200, 0.11);
+      --aura-b: rgba(64, 168, 200, 0.13);
+      --aura-c: rgba(138, 168, 120, 0.1);
       --aura-sweep: rgba(255, 255, 255, 0.035);
       --sweep-peak: 0.85;
       --grain-opacity: 0.16;
@@ -212,10 +215,11 @@
       --ring-b: rgba(214, 40, 98, 0.2);
       --ring-c: rgba(214, 40, 98, 0.44);
 
-      /* 白天主题：光晕减弱、扫光转冷、噪点更淡，避免白底发脏 */
+      /* 白天主题：光晕减弱、扫光转冷、噪点更淡，避免白底发脏。
+         色相与暗色主题保持同一家族，同样不用紫色。 */
       --aura-a: rgba(255, 92, 138, 0.1);
-      --aura-b: rgba(122, 92, 255, 0.07);
-      --aura-c: rgba(64, 168, 200, 0.07);
+      --aura-b: rgba(64, 168, 200, 0.07);
+      --aura-c: rgba(138, 168, 120, 0.07);
       --aura-sweep: rgba(255, 255, 255, 0.5);
       --sweep-peak: 0.5;
       --grain-opacity: 0.055;
@@ -416,6 +420,23 @@
       font: inherit;
     }
 
+    /* 评审：可点击元素应有统一的光标语言。
+       链接的 pointer 来自 UA 样式，这里显式声明，
+       保证别名元素（带 tabindex 的自定义控件）也一致。 */
+    a[href],
+    button,
+    summary,
+    [role="button"],
+    [tabindex="0"] {
+      cursor: pointer;
+    }
+
+    a[href]:disabled,
+    button:disabled,
+    [aria-disabled="true"] {
+      cursor: not-allowed;
+    }
+
     /* 焦点环：内圈用与底色无关的粉，外圈再补一圈与页面底同色的描边，
        这样无论落在深底、浅底还是粉色按钮上，总有一圈能看清。 */
     :focus-visible {
@@ -503,8 +524,20 @@
       position: sticky;
       top: 0;
       z-index: 50;
-      border-bottom: 1px solid var(--line);
+      border-bottom: 1px solid transparent;
+      background: transparent;
+      transition: background-color 320ms var(--ease-out), border-color 320ms var(--ease-out),
+                  box-shadow 320ms var(--ease-out);
+    }
+
+    /* 顶栏滚离首屏后转为半透明毛玻璃：首屏时保持通透，滚动后与正文分层。
+       未支持 backdrop-filter 的浏览器由背景色单独承担可读性。 */
+    .site-header.is-scrolled {
+      border-bottom-color: var(--line);
       background: var(--veil);
+      box-shadow: 0 1px 0 var(--line), var(--elev-1);
+      -webkit-backdrop-filter: blur(14px) saturate(1.4);
+      backdrop-filter: blur(14px) saturate(1.4);
     }
 
     .header-inner {
@@ -524,6 +557,29 @@
       gap: 12px;
       color: var(--enamel);
       text-decoration: none;
+    }
+
+    /* Logo 悬停：标记轻微旋转并提亮，暗示面板是可点回顶部的入口 */
+    .brand-mark {
+      transition: transform 420ms var(--ease), border-color 240ms var(--ease-out),
+                  background-color 240ms var(--ease-out);
+    }
+
+    .brand:hover .brand-mark,
+    .brand:focus-visible .brand-mark {
+      border-color: var(--ring-c);
+      background: var(--surface-soft);
+      transform: rotate(-6deg) scale(1.06);
+    }
+
+    .brand:active .brand-mark {
+      transform: rotate(-6deg) scale(0.97);
+    }
+
+    .brand:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 4px;
+      border-radius: 10px;
     }
 
     .brand-mark {
@@ -591,7 +647,8 @@
       right: 0;
       bottom: -1px;
       left: 0;
-      height: 1px;
+      height: 2px;
+      border-radius: 2px;
       content: "";
       background: var(--signal);
       transform: scaleX(0);
@@ -599,8 +656,13 @@
       transition: transform 280ms var(--ease);
     }
 
+    .site-nav a:not(.gh-link):not(.nav-install):hover {
+      color: var(--enamel);
+    }
+
     .site-nav a:not(.gh-link):not(.nav-install)[aria-current="true"] {
       color: var(--enamel);
+      font-weight: 650;
     }
 
     .site-nav a:not(.gh-link):not(.nav-install)[aria-current="true"]::after {
@@ -619,8 +681,17 @@
       gap: 9px;
     }
 
-    .site-nav .gh-link,
-    .site-nav .nav-install {
+    /* 极窄视口：只留图标与星标，避免顶栏撑破视口。
+       注意这些元素位于 .header-actions 内（不在 .site-nav 里），选择器不可加 .site-nav 前缀。 */
+    @media (max-width: 354px) {
+      .gh-label,
+      .nav-install {
+        display: none;
+      }
+    }
+
+    .gh-link,
+    .nav-install {
       position: relative;
       display: inline-flex;
       align-items: center;
@@ -639,16 +710,8 @@
       transition: border-color 180ms var(--ease-out), background-color 180ms var(--ease-out), color 180ms var(--ease-out), transform 220ms var(--ease);
     }
 
-    /* 极窄视口：只留图标与星标，避免顶栏撑破视口 */
-    @media (max-width: 354px) {
-      .site-nav .gh-label,
-      .site-nav .nav-install {
-        display: none;
-      }
-    }
-
-    .site-nav .gh-link::after,
-    .site-nav .nav-install::after {
+    .gh-link::after,
+    .nav-install::after {
       display: none;
     }
 
@@ -699,28 +762,33 @@
       }
     }
 
-    .site-nav .nav-install {
+    .nav-install {
       border-color: var(--edge-2);
       background: var(--ring-a);
       color: var(--signal-text);
     }
 
-    .site-nav .gh-link:hover,
-    .site-nav .gh-link:focus-visible {
+    .gh-link:hover,
+    .gh-link:focus-visible {
       border-color: var(--edge-3);
       background: var(--fill-3);
     }
 
-    .site-nav .nav-install:hover,
-    .site-nav .nav-install:focus-visible {
+    .nav-install:hover,
+    .nav-install:focus-visible {
       border-color: var(--ring-c);
       background: var(--ring-b);
       color: var(--signal-text-hi);
-      transform: translateY(-1px);
+      box-shadow: 0 3px 10px -4px var(--shadow-4);
+      transform: translateY(-1px) scale(1.03);
     }
 
-    .site-nav .gh-link:focus-visible,
-    .site-nav .nav-install:focus-visible {
+    .nav-install:active {
+      transform: translateY(0) scale(0.985);
+    }
+
+    .gh-link:focus-visible,
+    .nav-install:focus-visible {
       outline: 2px solid var(--focus-ring);
       outline-offset: 3px;
     }
@@ -837,6 +905,42 @@
       z-index: 2;
     }
 
+    /* 首屏入场：标题、简介、按钮、信息条依次到达，形成一次有节奏的落板。
+       只影响首屏，其余区块仍由 .reveal 统一接管。 */
+    .hero-copy > h1,
+    .hero-copy > .hero-intro,
+    .hero-copy > .hero-actions,
+    .hero-copy > .hero-meta {
+      animation: hero-rise 760ms var(--ease-out) both;
+    }
+
+    .hero-copy > h1 {
+      animation-delay: 40ms;
+    }
+
+    .hero-copy > .hero-intro {
+      animation-delay: 150ms;
+    }
+
+    .hero-copy > .hero-actions {
+      animation-delay: 250ms;
+    }
+
+    .hero-copy > .hero-meta {
+      animation-delay: 350ms;
+    }
+
+    @keyframes hero-rise {
+      from {
+        opacity: 0;
+        transform: translate3d(0, 22px, 0);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
     .hero-intro {
       max-width: 34rem;
       margin-bottom: 38px;
@@ -869,7 +973,7 @@
     }
 
     .button:active {
-      transform: translateY(0);
+      transform: translateY(0) scale(0.985);
     }
 
     .button-primary {
@@ -881,9 +985,15 @@
       box-shadow: 0 1px 2px var(--shadow-2), 0 10px 22px -14px var(--shadow-4);
     }
 
+    /* 主按钮 hover 再压深一档；次按钮 hover 边框与文字同时提亮 */
     .button-primary:hover {
       background: var(--signal-ground-hi);
       box-shadow: 0 2px 5px var(--shadow-2), 0 16px 30px -16px var(--shadow-4);
+      transform: translateY(-2px) scale(1.012);
+    }
+
+    .button-primary:active {
+      transform: translateY(0) scale(0.985);
     }
 
     .button-secondary {
@@ -891,11 +1001,31 @@
       color: var(--enamel);
       background: var(--surface);
       box-shadow: var(--elev-1);
+      /* 评审：次要按钮 hover 时边框变亮、文字提亮，并给一个小箭头引导点击。 */
+      transition: border-color 220ms var(--ease-out), color 220ms var(--ease-out),
+        box-shadow 220ms var(--ease-out), transform 220ms var(--ease-out);
+    }
+
+    /* 引导箭头：默认贴紧文字，hover 时向右推开一点 */
+    .button-secondary::after {
+      margin-left: 8px;
+      content: "→";
+      font-family: var(--measure);
+      font-size: 0.92em;
+      opacity: 0.7;
+      transition: transform 240ms var(--ease-out), opacity 240ms var(--ease-out);
     }
 
     .button-secondary:hover {
-      border-color: var(--signal);
-      color: var(--signal-text);
+      border-color: var(--line-strong);
+      color: var(--enamel);
+      box-shadow: var(--elev-2);
+      background: var(--surface-soft);
+    }
+
+    .button-secondary:hover::after {
+      opacity: 1;
+      transform: translateX(3px);
     }
 
     .hero-meta {
@@ -1064,10 +1194,12 @@
     .board-preview {
       position: relative;
       display: grid;
+      grid-template-rows: auto auto;
       min-width: 0;
       padding: clamp(18px, 2.2vw, 28px);
       overflow: hidden;
-      place-items: center;
+      align-content: center;
+      justify-items: center;
       background:
         radial-gradient(130% 80% at 84% 4%, var(--glow-b), transparent 62%),
         linear-gradient(180deg, var(--bezel-hi), var(--bezel-flat));
@@ -1081,6 +1213,26 @@
       max-width: 420px;
       perspective: 1500px;
       perspective-origin: 50% 42%;
+      /* 极缓慢的呼吸浮动，暗示这是一块悬浮面板而非静态插图 */
+      animation: deck-breathe 7.5s var(--ease-inout) infinite;
+    }
+
+    @keyframes deck-breathe {
+      0%, 100% { transform: translate3d(0, 0, 0); }
+      50% { transform: translate3d(0, -7px, 0); }
+    }
+
+    /* 牌面下方的极淡说明：这块面板是脚本运行后的样子，不是本站已收集的数据。
+       字号取 0.7rem（11.2px），越过 11px 可读性下限；
+       上一版 0.68rem 只有 10.88px，属于功能性文本过小。 */
+    .preview-note {
+      margin: 20px 0 0;
+      color: var(--meta-dim);
+      font-family: var(--measure);
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-align: center;
+      text-transform: uppercase;
     }
 
     .preview-deck > .preview-slot {
@@ -1385,6 +1537,8 @@
       position: relative;
     }
 
+    /* 区块分割线：两端淡出而不是硬截断，进入视口时从中间向两端展开。
+       渐隐由渐变完成，展开只动 transform，不触发重排。 */
     .section-rule::before {
       position: absolute;
       top: 0;
@@ -1392,7 +1546,20 @@
       left: 0;
       height: 1px;
       content: "";
-      background: var(--line-strong);
+      background: linear-gradient(
+        90deg,
+        transparent 0%,
+        var(--line-strong) 16%,
+        var(--line-strong) 84%,
+        transparent 100%
+      );
+      transform: scaleX(0);
+      transform-origin: 50% 50%;
+      transition: transform 1100ms var(--ease) 120ms;
+    }
+
+    .section-rule.is-visible::before {
+      transform: scaleX(1);
     }
 
     .measurement-layout {
@@ -1466,6 +1633,15 @@
       font-size: 0.72rem;
       letter-spacing: 0.14em;
       text-transform: uppercase;
+      /* 评审：悬浮模块时粉色小标题应轻微放大，给出「这一行是活的」的信号。
+         放大锚在左端，避免文字整体右移。 */
+      transform-origin: 0 50%;
+      transition: transform 320ms var(--ease-out), letter-spacing 320ms var(--ease-out);
+    }
+
+    .measurement-row:hover .measurement-index {
+      transform: scale(1.07);
+      letter-spacing: 0.16em;
     }
 
     .measurement-body h3 {
@@ -1477,9 +1653,12 @@
     }
 
     .measurement-body p {
+      /* 评审：右侧说明文字偏小、与左侧大标题轻重失衡。
+         0.94rem → 1.02rem，行高同步放宽，两栏视觉重量更接近。 */
       max-width: 58ch;
       margin-bottom: 0;
-      font-size: 0.94rem;
+      font-size: 1.02rem;
+      line-height: 1.88;
     }
 
     .measurement-evidence {
@@ -1492,6 +1671,15 @@
       font-size: 0.7rem;
       letter-spacing: 0.1em;
       text-transform: uppercase;
+      /* 评审：静态方框无交互感。悬停时底与边一起提亮，像铭牌被点亮。 */
+      transition: background-color 260ms var(--ease-out),
+        border-color 260ms var(--ease-out), color 260ms var(--ease-out);
+    }
+
+    .measurement-evidence:hover {
+      border-color: var(--ring-c);
+      color: var(--enamel);
+      background: var(--fill-2);
     }
 
     .timeline-plate {
@@ -1539,7 +1727,27 @@
       border: 1px solid var(--line-strong);
       content: "";
       background: var(--ink);
+      /* 评审：节点应依次点亮。初始压暗缩小，由 --lit 逐个抬起。
+         每个节点自带延迟，形成从左到右的推进感。 */
+      transform: scale(0.62);
+      opacity: 0.35;
+      transition: transform 520ms var(--ease-out) var(--lit-delay, 0ms),
+        opacity 520ms var(--ease-out) var(--lit-delay, 0ms),
+        border-color 520ms var(--ease-out) var(--lit-delay, 0ms),
+        background-color 520ms var(--ease-out) var(--lit-delay, 0ms);
     }
+
+    .timeline-plate.is-lit .timeline-step::before {
+      transform: scale(1);
+      opacity: 1;
+    }
+
+    .timeline-step:nth-child(1)::before { --lit-delay: 0ms; }
+    .timeline-step:nth-child(2)::before { --lit-delay: 90ms; }
+    .timeline-step:nth-child(3)::before { --lit-delay: 180ms; }
+    .timeline-step:nth-child(4)::before { --lit-delay: 270ms; }
+    .timeline-step:nth-child(5)::before { --lit-delay: 360ms; }
+    .timeline-step:nth-child(6)::before { --lit-delay: 450ms; }
 
     .timeline-step.is-live {
       color: var(--signal-text);
@@ -1548,6 +1756,12 @@
     .timeline-step.is-live::before {
       border-color: var(--signal);
       background: var(--signal);
+    }
+
+    /* REAL 是核心概念，点亮后额外给一圈脉冲光晕 */
+    .timeline-plate.is-lit .timeline-step.is-live::before {
+      transform: scale(1.18);
+      box-shadow: 0 0 0 3px var(--ring-a);
     }
 
     .detail-frame {
@@ -1569,10 +1783,26 @@
       aspect-ratio: 4 / 5;
       box-shadow: 0 22px 48px var(--shadow-1);
       transition: transform 700ms var(--ease), box-shadow 700ms var(--ease);
+      /* 评审：左侧示例面板应有轻微悬浮呼吸，暗示它是活的弹窗。 */
+      animation: frame-breathe 8.5s var(--ease-inout) infinite;
+    }
+
+    @keyframes frame-breathe {
+      0%,
+      100% {
+        transform: translate3d(0, 0, 0);
+      }
+      50% {
+        transform: translate3d(0, -6px, 0);
+      }
     }
 
     .detail-frame:hover .detail-frame-media {
-      transform: translateY(-6px);
+      /* 呼吸动画占用 transform，CSS 动画优先级高于普通声明，
+         若这里再写 transform 会被动画覆盖。改用独立的 scale / translate
+         属性，它们与 transform 叠加而非互相覆盖。 */
+      scale: 1.015;
+      translate: 0 -6px;
       box-shadow: 0 32px 60px var(--shadow-2);
     }
 
@@ -1633,19 +1863,47 @@
     }
 
     .support-item {
+      position: relative;
       min-height: 122px;
       padding: 26px 24px;
       border-right: 1px solid var(--line);
+      /* 评审：四卡片均分、缺少 hover 状态区分，视觉平淡。
+         悬停时卡片自己抬起、底色微亮、边框高亮。 */
+      transition: background-color 320ms var(--ease-out), transform 320ms var(--ease-out);
+    }
+
+    /* 用一层伪元素画悬停边框，避免改动 border 触发相邻卡片重排 */
+    .support-item::before {
+      position: absolute;
+      inset: 0;
+      content: "";
+      border-top: 1px solid transparent;
+      border-bottom: 1px solid transparent;
+      pointer-events: none;
+      transition: border-color 320ms var(--ease-out);
+    }
+
+    .support-item:hover {
+      background: var(--fill-1);
+      transform: translateY(-3px);
+    }
+
+    .support-item:hover::before {
+      border-top-color: var(--ring-c);
+      border-bottom-color: var(--ring-c);
     }
 
     .support-item:last-child {
       border-right: 0;
     }
 
+    /* 评审：标题要与描述拉开层级。字重与字号同时上一档。 */
     .support-item strong {
       display: block;
       margin-bottom: 8px;
-      font-size: 0.95rem;
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: -0.005em;
     }
 
     .support-item span {
@@ -1686,9 +1944,24 @@
       left: 12%;
       height: 1px;
       background: var(--route);
-      transform: translateY(-1px);
+      /* 默认是铺满的终态：没有 JS 时（或观察器未触发）内容照常可见。
+         JS 存在时由下面的 .js-motion 规则压回起点再绘制。 */
+      transform: translateY(-1px) scaleX(1);
+      transform-origin: 0 50%;
+      transition: transform 1400ms var(--ease) 260ms;
     }
 
+    /* 评审：连线应有叙事感，进入区块后从左向右逐段绘制。
+       .js-motion 由脚本在 <html> 上标记，保证无 JS 时不会永久收拢。 */
+    .js-motion .route-line {
+      transform: translateY(-1px) scaleX(0);
+    }
+
+    .js-motion .privacy-route.is-drawn .route-line {
+      transform: translateY(-1px) scaleX(1);
+    }
+
+    /* 箭头随连线末端一起出现 */
     .route-line::after {
       position: absolute;
       top: -4px;
@@ -1699,6 +1972,17 @@
       border-right: 1px solid var(--route);
       content: "";
       transform: rotate(45deg);
+      /* 同样默认可见，仅在有 JS 时随绘制一起淡入 */
+      opacity: 1;
+      transition: opacity 380ms var(--ease-out) 1420ms;
+    }
+
+    .js-motion .route-line::after {
+      opacity: 0;
+    }
+
+    .js-motion .privacy-route.is-drawn .route-line::after {
+      opacity: 1;
     }
 
     .route-nodes {
@@ -1721,6 +2005,36 @@
       box-shadow: var(--elev-1);
       align-content: center;
       text-align: center;
+      /* 评审：盒子依次淡入；hover 时边框高亮，与连线一起亮起来。
+         默认可见，仅在有 JS 时压回起点等待入场。 */
+      opacity: 1;
+      transition: opacity 620ms var(--ease-out) var(--node-delay, 0ms),
+        transform 620ms var(--ease-out) var(--node-delay, 0ms),
+        border-color 300ms var(--ease-out), box-shadow 300ms var(--ease-out);
+    }
+
+    .js-motion .route-node {
+      opacity: 0;
+      transform: translate3d(0, 14px, 0);
+    }
+
+    .js-motion .privacy-route.is-drawn .route-node {
+      opacity: 1;
+      transform: none;
+    }
+
+    .route-node:nth-child(1) { --node-delay: 380ms; }
+    .route-node:nth-child(2) { --node-delay: 620ms; }
+    .route-node:nth-child(3) { --node-delay: 860ms; }
+
+    .route-node:hover {
+      border-color: var(--route);
+      box-shadow: var(--elev-2);
+    }
+
+    /* hover 任意盒子时整条连线提亮，强调「数据只走这一条线」 */
+    .privacy-route:has(.route-node:hover) .route-line {
+      background: var(--route-text);
     }
 
     .route-node-code {
@@ -1796,17 +2110,127 @@
       padding: 20px 18px 0 0;
     }
 
+    /* 评审：`0` 是核心卖点（零上传请求），需要最大视觉权重。
+       首个指标放大并加亮，后两个保持基准字号，形成明确主次。 */
     .privacy-fact strong {
       display: block;
       color: var(--signal-text);
       font-family: var(--measure);
       font-size: 1.25rem;
       font-variant-numeric: tabular-nums;
+      line-height: 1.05;
+      transition: color 260ms var(--ease-out);
+    }
+
+    .privacy-fact:first-child strong {
+      font-size: clamp(2.1rem, 3.4vw, 2.9rem);
+      letter-spacing: -0.02em;
+    }
+
+    .privacy-fact:hover strong {
+      color: var(--signal);
     }
 
     .privacy-fact span {
       color: var(--muted);
       font-size: 0.75rem;
+    }
+
+    /* ---- 预加载 ---- */
+    .preloader {
+      position: fixed;
+      inset: 0;
+      z-index: 90;
+      display: grid;
+      place-items: center;
+      background: var(--ink);
+      transition: opacity 420ms var(--ease-out), visibility 420ms;
+    }
+
+    .preloader.is-done {
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    .preloader-line {
+      width: min(180px, 34vw);
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--signal), transparent);
+      transform: scaleX(0);
+      transform-origin: 50% 50%;
+      animation: preloader-sweep 1100ms var(--ease-inout) infinite;
+    }
+
+    @keyframes preloader-sweep {
+      0% {
+        transform: scaleX(0);
+        opacity: 0.2;
+      }
+      50% {
+        transform: scaleX(1);
+        opacity: 1;
+      }
+      100% {
+        transform: scaleX(0);
+        opacity: 0.2;
+      }
+    }
+
+    /* 前置风险提示：用左侧一道竖线而不是整块底色，
+       既醒目又不与上方的指标区抢重量。 */
+    .platform-note {
+      margin-top: 28px;
+      padding: 14px 0 14px 16px;
+      border-left: 2px solid var(--signal);
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.75;
+    }
+
+    /* ---- 常见问题 ---- */
+    .faq {
+      margin-top: 46px;
+      padding-top: 30px;
+      border-top: 1px solid var(--line);
+    }
+
+    .faq-title {
+      margin-bottom: 6px;
+      font-family: var(--measure);
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--meta-dim);
+    }
+
+    .faq-list {
+      margin: 0;
+    }
+
+    .faq-item {
+      padding: 18px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .faq-item:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .faq-item dt {
+      margin-bottom: 8px;
+      font-size: 0.94rem;
+      font-weight: 650;
+    }
+
+    .faq-item dd {
+      margin: 0;
+      max-width: 52ch;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.85;
+      text-wrap: pretty;
     }
 
     .install {
@@ -1866,6 +2290,29 @@
       padding: 34px;
       color: var(--surface-ink);
       background: var(--preview-ground);
+      /* 评审：白色票根在深色页面里对比很强，但缺少微动效。
+         进入视口时从右侧滑入，悬停时轻微上浮，柔和阴影托住它。 */
+      box-shadow: 0 18px 44px -18px var(--shadow-3);
+      transition: box-shadow 420ms var(--ease-out), transform 420ms var(--ease-out);
+    }
+
+    .js-motion .destination-plate .destination-side {
+      opacity: 0;
+      transform: translate3d(34px, 0, 0);
+    }
+
+    .js-motion .destination-plate.is-settled .destination-side {
+      opacity: 1;
+      transform: none;
+      transition: opacity 760ms var(--ease-out) 180ms, box-shadow 420ms var(--ease-out), transform 760ms var(--ease-out) 180ms;
+    }
+
+    /* hover 上浮写在入场规则之后：入场态同样是 .js-motion + .is-settled，
+       选择器权重相同，靠顺序让 hover 的 transform 胜出。 */
+    .destination-plate:hover .destination-side,
+    .js-motion .destination-plate.is-settled:hover .destination-side {
+      box-shadow: 0 26px 58px -20px var(--shadow-4);
+      transform: translate3d(0, -5px, 0);
     }
 
     .destination-code {
@@ -1974,11 +2421,13 @@
       text-wrap: pretty;
     }
 
-    /* 状态点：本地运行中 */
+    /* 状态点：本地运行中。0.7rem（11.2px）为可读性下限，
+       配合下方 nowrap + ellipsis 保证英文文案不溢出胶囊。 */
     .footer-status {
       display: inline-flex;
       align-items: center;
       gap: 8px;
+      max-width: 100%;
       margin-top: 24px;
       padding: 6px 13px 6px 11px;
       border: 1px solid var(--edge-1);
@@ -1986,9 +2435,12 @@
       background: var(--fill-1);
       color: var(--meta-dim);
       font-family: var(--measure);
-      font-size: 0.68rem;
+      font-size: 0.7rem;
       letter-spacing: 0.12em;
       text-transform: uppercase;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
     }
 
     .footer-status::before {
@@ -1998,6 +2450,52 @@
       border-radius: 50%;
       background: #6fbf73;
       box-shadow: 0 0 0 3px rgba(111, 191, 115, 0.16);
+    }
+
+    /* 评审：状态标签加 tooltip，悬浮说明数据只留在本地。
+       用 CSS 气泡而不是 title 属性，保证中英切换与键盘可达。 */
+    .footer-status {
+      position: relative;
+      cursor: help;
+      transition: border-color 220ms var(--ease-out), color 220ms var(--ease-out);
+    }
+
+    .footer-status:hover,
+    .footer-status:focus-visible {
+      border-color: var(--ring-c);
+      color: var(--enamel);
+    }
+
+    .footer-status::after {
+      position: absolute;
+      bottom: calc(100% + 9px);
+      left: 0;
+      z-index: 5;
+      width: max-content;
+      max-width: 15rem;
+      padding: 7px 11px;
+      border: 1px solid var(--surface-line);
+      border-radius: 8px;
+      content: attr(data-tip);
+      background: var(--surface);
+      color: var(--enamel);
+      font-family: var(--ui);
+      font-size: 0.72rem;
+      letter-spacing: 0;
+      line-height: 1.5;
+      text-transform: none;
+      white-space: normal;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(4px);
+      box-shadow: var(--elev-2);
+      transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out);
+    }
+
+    .footer-status:hover::after,
+    .footer-status:focus-visible::after {
+      opacity: 1;
+      transform: none;
     }
 
     /* ---- 链接区 ---- */
@@ -2049,6 +2547,27 @@
     .footer-links a:hover,
     .footer-links a:focus-visible {
       color: var(--enamel);
+    }
+
+    /* 评审：hover 时文字变亮之外，右侧应出现一小段横线作为指向。
+       用绝对定位的伪元素，避免影响行内排版。 */
+    .footer-links a {
+      position: relative;
+    }
+
+    .footer-links a::after {
+      width: 0;
+      height: 1px;
+      margin-left: 2px;
+      content: "";
+      background: currentColor;
+      opacity: 0.55;
+      transition: width 260ms var(--ease-out);
+    }
+
+    .footer-links a:hover::after,
+    .footer-links a:focus-visible::after {
+      width: 14px;
     }
 
     .footer-links a:hover::before,
@@ -2188,15 +2707,119 @@
       }
     }
 
+    /* 汉堡菜单按钮：仅在 <840px 且三条区块导航被收起时出现 */
+    .nav-toggle {
+      display: none;
+      flex: 0 0 40px;
+      width: 40px;
+      height: 34px;
+      padding: 0;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      place-items: center;
+      color: var(--enamel);
+      background: transparent;
+      cursor: pointer;
+      transition: border-color 220ms var(--ease-out), background-color 220ms var(--ease-out);
+    }
+
+    .nav-toggle:hover {
+      border-color: var(--ring-c);
+      background: var(--fill-1);
+    }
+
+    .nav-toggle-bars {
+      position: relative;
+      display: block;
+      width: 15px;
+      height: 1.5px;
+      border-radius: 2px;
+      background: currentColor;
+      transition: transform 260ms var(--ease-out), background-color 160ms linear;
+    }
+
+    .nav-toggle-bars::before,
+    .nav-toggle-bars::after {
+      position: absolute;
+      left: 0;
+      width: 15px;
+      height: 1.5px;
+      border-radius: 2px;
+      content: "";
+      background: currentColor;
+      transition: transform 260ms var(--ease-out);
+    }
+
+    .nav-toggle-bars::before {
+      transform: translateY(-5px);
+    }
+
+    .nav-toggle-bars::after {
+      transform: translateY(5px);
+    }
+
+    /* 展开态：上下两条向中间收拢成叉 */
+    .nav-toggle[aria-expanded="true"] .nav-toggle-bars {
+      background: transparent;
+    }
+
+    .nav-toggle[aria-expanded="true"] .nav-toggle-bars::before {
+      transform: rotate(45deg);
+    }
+
+    .nav-toggle[aria-expanded="true"] .nav-toggle-bars::after {
+      transform: rotate(-45deg);
+    }
+
     @media (max-width: 840px) {
-      .site-nav a:not(.gh-link):not(.nav-install),
+      .header-inner {
+        position: relative;
+      }
+
+      .nav-toggle {
+        display: grid;
+      }
+
+      /* 区块导航改为从顶栏下方展开的一列面板，保持与移动端一致的触控尺寸 */
+      .site-nav a:not(.gh-link):not(.nav-install) {
+        display: none;
+        align-items: center;
+        justify-content: flex-start;
+        width: 100%;
+        min-width: 0;
+        padding: 12px 4px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+      }
+
+      .site-nav a:not(.gh-link):not(.nav-install)::after {
+        display: none;
+      }
+
+      .site-nav[data-nav-open="true"] a:not(.gh-link):not(.nav-install) {
+        display: flex;
+      }
+
       .header-divider {
         display: none;
       }
 
       .site-nav {
-        min-width: 0;
-        gap: 8px;
+        position: absolute;
+        top: calc(100% + 1px);
+        right: var(--gutter);
+        left: var(--gutter);
+        z-index: 60;
+        display: none;
+        padding: 6px 16px;
+        border: 1px solid var(--surface-line);
+        border-radius: 12px;
+        background: var(--surface);
+        box-shadow: var(--elev-3);
+      }
+
+      .site-nav[data-nav-open="true"] {
+        display: grid;
       }
 
       .header-actions {
@@ -2205,13 +2828,6 @@
 
       .gh-label {
         display: none;
-      }
-
-      .site-nav .gh-link,
-      .site-nav .nav-install {
-        min-height: 34px;
-        padding: 0 11px;
-        font-size: 0.75rem;
       }
 
       .pref-group {
@@ -2391,8 +3007,8 @@
         letter-spacing: 0.01em;
       }
 
-      .site-nav .gh-link,
-      .site-nav .nav-install {
+      .gh-link,
+      .nav-install {
         min-height: 32px;
         padding: 0 9px;
         font-size: 0.71rem;
@@ -2472,7 +3088,9 @@
       *::after {
         scroll-behavior: auto !important;
         transition-duration: 0.01ms !important;
+        transition-delay: 0ms !important;
         animation-duration: 0.01ms !important;
+        animation-delay: 0ms !important;
         animation-iteration-count: 1 !important;
       }
 
@@ -2486,6 +3104,22 @@
       .preview-slot[data-phase] {
         animation: none !important;
         transition: none !important;
+      }
+
+      /* 呼吸浮动在 reduce 下完全停用，避免停在偏移的中间态 */
+      .preview-deck,
+      .detail-frame-media {
+        animation: none !important;
+        transform: none !important;
+      }
+
+      /* 首屏入场在 reduce 下直接呈现终态 */
+      .hero-copy > h1,
+      .hero-copy > .hero-intro,
+      .hero-copy > .hero-actions,
+      .hero-copy > .hero-meta {
+        opacity: 1 !important;
+        transform: none !important;
       }
 
       .preview-slot[data-phase="out"] {
@@ -2502,15 +3136,63 @@
         transform: none !important;
       }
 
+      /* 预加载在 reduce 下不播扫描动画，直接就绪即移除 */
+      .preloader-line {
+        animation: none !important;
+        transform: scaleX(1) !important;
+        opacity: 0.7 !important;
+      }
+
+      .preloader {
+        transition-duration: 0.01ms !important;
+      }
+
       .reveal {
         opacity: 1;
         clip-path: none;
+        transform: none;
+      }
+
+      /* 隐私路线的绘制与盒子淡入在 reduce 下直接呈现终态 */
+      .route-line,
+      .js-motion .route-line,
+      .privacy-route.is-drawn .route-line {
+        transform: translateY(-1px) scaleX(1);
+      }
+
+      .route-line::after,
+      .js-motion .route-line::after,
+      .privacy-route.is-drawn .route-line::after {
+        opacity: 1;
+      }
+
+      .route-node,
+      .js-motion .route-node,
+      .privacy-route.is-drawn .route-node {
+        opacity: 1;
+        transform: none;
+      }
+
+      /* 票根滑入在 reduce 下直接呈现终态 */
+      .js-motion .destination-plate .destination-side,
+      .js-motion .destination-plate.is-settled .destination-side {
+        opacity: 1;
         transform: none;
       }
     }
   </style>
 </head>
 <body>
+  <!-- 有脚本才把入场动画压回起点；无脚本时入场相关元素直接呈现终态，
+       避免渐进增强场景下内容永久不可见。 -->
+  <script>document.documentElement.classList.add("js-motion");</script>
+
+  <!-- 极简预加载：只画一条与全站语言一致的扫描线，
+       页面就绪后淡出并移除，避免内容突然弹出。无脚本时不会被渲染。 -->
+  <div class="preloader" id="preloader" aria-hidden="true">
+    <div class="preloader-line"></div>
+  </div>
+
   <div class="bg-motion" aria-hidden="true">
     <div class="bg-orb bg-orb-a"></div>
     <div class="bg-orb bg-orb-b"></div>
@@ -2522,7 +3204,7 @@
 
   <a class="skip-link" href="#main">跳到主要内容</a>
 
-  <header class="site-header">
+  <header class="site-header" data-site-header>
     <div class="header-inner">
       <a class="brand" href="#top" aria-label="Bilibili Watch Panel 首页" data-i18n-aria-label="brand.home">
         <span class="brand-mark" aria-hidden="true">
@@ -2536,12 +3218,15 @@
         </span>
       </a>
 
-      <nav class="site-nav" aria-label="主导航" data-i18n-aria-label="nav.aria" data-site-nav>
+      <nav class="site-nav" id="siteNavPanel" aria-label="主导航" data-i18n-aria-label="nav.aria" data-site-nav>
         <a href="#top" data-nav-section="top" data-i18n="nav.overview">概览</a>
         <a href="#records" data-nav-section="records" data-i18n="nav.method">统计口径</a>
         <a href="#privacy" data-nav-section="privacy" data-i18n="nav.privacy">隐私说明</a>
-        <span class="header-divider" aria-hidden="true"></span>
-        <div class="header-actions">
+      </nav>
+
+      <span class="header-divider" aria-hidden="true"></span>
+
+      <div class="header-actions">
           <div class="pref-group" role="group" aria-label="显示偏好" data-i18n-aria-label="pref.group">
             <button class="pref-btn" id="themeToggle" type="button" aria-pressed="false"
                     aria-label="切换到白天模式" data-i18n-aria-label="pref.themeToLight" title="白天 / 黑夜">
@@ -2567,10 +3252,13 @@
             <span class="gh-label">GitHub</span>
             <span class="gh-count" data-stars hidden aria-label="GitHub star 数">0</span>
           </a>
-          <a class="site-nav-install nav-install" href="https://raw.githubusercontent.com/Gavin-gwj/bilibili-watch-panel/main/bilibili-watch-panel.user.js">安装脚本</a>
+          <a class="site-nav-install nav-install" href="https://raw.githubusercontent.com/Gavin-gwj/bilibili-watch-panel/main/bilibili-watch-panel.user.js" data-i18n="nav.install">获取脚本</a>
 
-        </div>
-      </nav>
+          <button class="nav-toggle" id="navToggle" type="button" aria-expanded="false"
+                  aria-controls="siteNavPanel" aria-label="展开导航菜单" data-i18n-aria-label="nav.toggle">
+            <span class="nav-toggle-bars" aria-hidden="true"></span>
+          </button>
+      </div>
     </div>
   </header>
 
@@ -2583,7 +3271,7 @@
             <span data-i18n="hero.lead">Bilibili Watch Panel 把真实播放进度、播放会话和观看质量整理成一份本地档案。没有账号，没有服务器，没有数据上传。</span>
           </p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://raw.githubusercontent.com/Gavin-gwj/bilibili-watch-panel/main/bilibili-watch-panel.user.js" data-i18n="hero.install">安装用户脚本</a>
+            <a class="button button-primary" href="https://raw.githubusercontent.com/Gavin-gwj/bilibili-watch-panel/main/bilibili-watch-panel.user.js" data-i18n="hero.install">获取脚本</a>
             <a class="button button-secondary" href="https://github.com/Gavin-gwj/bilibili-watch-panel" data-i18n="hero.github">查看 GitHub</a>
           </div>
           <ul class="hero-meta" aria-label="项目信息" data-i18n-aria-label="hero.metaAria">
@@ -2646,6 +3334,7 @@
                     <span class="preview-caption" data-i18n="board.sample">示例数据</span>
                   </div>
                 </div>
+                <p class="preview-note" data-i18n="board.note">示例预览 · 脚本运行后将在 B 站页面显示</p>
               </div>
             </div>
           </article>
@@ -2771,6 +3460,29 @@
             <div class="privacy-fact"><strong>3</strong><span data-i18n="privacy.f2">固定 GM 存储权限</span></div>
             <div class="privacy-fact"><strong>MIT</strong><span data-i18n="privacy.f3">开放源代码许可证</span></div>
           </div>
+
+          <!-- 评审：前置风险提示放在隐私区之后，用户决定安装前一定能看到 -->
+          <p class="platform-note" data-i18n="privacy.platformNote">
+            仅支持 PC 端 Chrome / Edge 等可安装 Tampermonkey 的浏览器，移动端浏览器无法运行。
+          </p>
+
+          <div class="faq">
+            <h3 class="faq-title" data-i18n="faq.title">常见问题</h3>
+            <dl class="faq-list">
+              <div class="faq-item">
+                <dt data-i18n="faq.q1">清除浏览器数据会怎样？</dt>
+                <dd data-i18n="faq.a1">观看记录保存在浏览器本地存储里。清除浏览器数据、站点数据或卸载扩展都会一并删除记录，且无法找回。建议定期用面板里的导出功能存一份 JSON 备份。</dd>
+              </div>
+              <div class="faq-item">
+                <dt data-i18n="faq.q2">换浏览器或换电脑怎么迁移？</dt>
+                <dd data-i18n="faq.a2">在新环境装好脚本后，用面板里的「导入」选择之前导出的 JSON 文件，记录会按日期合并进去。两台机器的数据不会自动同步，需要手动导入一次。</dd>
+              </div>
+              <div class="faq-item">
+                <dt data-i18n="faq.q3">脚本会上传我的观看数据吗？</dt>
+                <dd data-i18n="faq.a3">不会。脚本只在浏览器里读写本地存储，唯一的外部请求是向 B 站公开接口查询视频标题，不包含任何观看时长或进度信息。</dd>
+              </div>
+            </dl>
+          </div>
         </div>
       </div>
     </section>
@@ -2781,7 +3493,7 @@
           <h2 data-i18n="install.title">从今天开始，给自己的观看留一份底稿。</h2>
           <p data-i18n="install.copy">安装 Tampermonkey，再点击安装用户脚本。打开任意 B 站页面后，右侧会出现可拖动的观看数据入口。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://raw.githubusercontent.com/Gavin-gwj/bilibili-watch-panel/main/bilibili-watch-panel.user.js" data-i18n="install.cta">获取 v0.9.1</a>
+            <a class="button button-primary" href="https://raw.githubusercontent.com/Gavin-gwj/bilibili-watch-panel/main/bilibili-watch-panel.user.js" data-i18n="install.cta">获取脚本</a>
             <a class="button button-secondary" href="https://github.com/Gavin-gwj/bilibili-watch-panel#安装" data-i18n="install.guide">查看安装说明</a>
           </div>
         </div>
@@ -2812,7 +3524,7 @@
             <span class="footer-brand-mark">Local record</span>
           </div>
           <p data-i18n="footer.copy">Bilibili Watch Panel 是一个纯本地运行的 Tampermonkey 用户脚本。页面截图中的数据来自本机浏览器示例，仅用于展示界面。</p>
-          <span class="footer-status" data-i18n="footer.status">本地运行 · 无服务器</span>
+          <span class="footer-status" tabindex="0" data-tip="所有数据仅保存在浏览器本地，不会上传" data-i18n="footer.status" data-i18n-tip="footer.statusTip">本地运行 · 无服务器</span>
         </div>
 
         <nav class="footer-links" aria-label="页脚导航" data-i18n-aria-label="footer.aria">
@@ -2929,10 +3641,11 @@
         "brand.tag": "LOCAL WATCH LEDGER",
         "brand.home": "Bilibili Watch Panel 首页",
         "nav.aria": "主导航",
+        "nav.toggle": "展开导航菜单",
         "nav.overview": "概览",
         "nav.method": "统计口径",
         "nav.privacy": "隐私说明",
-        "nav.install": "安装脚本",
+        "nav.install": "获取脚本",
         "nav.stars": "GitHub star 数",
         "pref.group": "显示偏好",
         "pref.themeToLight": "切换到白天模式",
@@ -2940,7 +3653,7 @@
         "pref.langLabel": "Switch to English",
         "hero.title": "你的观看记录，应该有它自己的时刻表。",
         "hero.lead": "Bilibili Watch Panel 把真实播放进度、播放会话和观看质量整理成一份本地档案。没有账号，没有服务器，没有数据上传。",
-        "hero.install": "安装用户脚本",
+        "hero.install": "获取脚本",
         "hero.github": "查看 GitHub",
         "hero.metaAria": "项目信息",
         "hero.meta.local": "本地存储",
@@ -2950,6 +3663,7 @@
         "board.local": "Stored on this browser",
         "board.tabsAria": "四种面板视图",
         "board.sample": "示例数据",
+        "board.note": "示例预览 · 脚本运行后将在 B 站页面显示",
         "tab.today": "今日",
         "tab.week": "本周",
         "tab.all": "全部",
@@ -2985,6 +3699,14 @@
         "privacy.title": "你的数据只走这一条线。",
         "privacy.copy": "从 B 站播放事件到本地存储，再到你主动选择的导出文件，整条路径都在浏览器里完成。项目没有账号系统，没有服务端，也不会上传观看数据。",
         "privacy.routeAria": "本地数据处理路径",
+        "privacy.platformNote": "仅支持 PC 端 Chrome / Edge 等可安装 Tampermonkey 的浏览器，移动端浏览器无法运行。",
+        "faq.title": "常见问题",
+        "faq.q1": "清除浏览器数据会怎样？",
+        "faq.a1": "观看记录保存在浏览器本地存储里。清除浏览器数据、站点数据或卸载扩展都会一并删除记录，且无法找回。建议定期用面板里的导出功能存一份 JSON 备份。",
+        "faq.q2": "换浏览器或换电脑怎么迁移？",
+        "faq.a2": "在新环境装好脚本后，用面板里的「导入」选择之前导出的 JSON 文件，记录会按日期合并进去。两台机器的数据不会自动同步，需要手动导入一次。",
+        "faq.q3": "脚本会上传我的观看数据吗？",
+        "faq.a3": "不会。脚本只在浏览器里读写本地存储，唯一的外部请求是向 B 站公开接口查询视频标题，不包含任何观看时长或进度信息。",
         "privacy.server": "Server path not connected",
         "privacy.n1.code": "Source 01",
         "privacy.n1.title": "B 站播放事件",
@@ -3000,7 +3722,7 @@
         "privacy.f3": "开放源代码许可证",
         "install.title": "从今天开始，给自己的观看留一份底稿。",
         "install.copy": "安装 Tampermonkey，再点击安装用户脚本。打开任意 B 站页面后，右侧会出现可拖动的观看数据入口。",
-        "install.cta": "获取 v0.9.1",
+        "install.cta": "获取脚本",
         "install.guide": "查看安装说明",
         "install.sideAria": "项目终点信息",
         "install.code": "Destination",
@@ -3013,6 +3735,7 @@
         "install.m4": "版本",
         "footer.copy": "Bilibili Watch Panel 是一个纯本地运行的 Tampermonkey 用户脚本。页面截图中的数据来自本机浏览器示例，仅用于展示界面。",
         "footer.status": "本地运行 · 无服务器",
+        "footer.statusTip": "所有数据仅保存在浏览器本地，不会上传",
         "footer.colProject": "项目",
         "footer.colDocs": "说明",
         "footer.readme": "使用说明",
@@ -3027,10 +3750,11 @@
         "brand.tag": "LOCAL WATCH LEDGER",
         "brand.home": "Bilibili Watch Panel home",
         "nav.aria": "Main navigation",
+        "nav.toggle": "Open navigation menu",
         "nav.overview": "Overview",
         "nav.method": "Method",
         "nav.privacy": "Privacy",
-        "nav.install": "Install script",
+        "nav.install": "Get script",
         "nav.stars": "GitHub star count",
         "pref.group": "Display preferences",
         "pref.themeToLight": "Switch to light mode",
@@ -3038,7 +3762,7 @@
         "pref.langLabel": "切换到中文",
         "hero.title": "Your watch history deserves a timetable of its own.",
         "hero.lead": "Bilibili Watch Panel turns real playback progress, viewing sessions and watch quality into a local ledger. No account, no server, nothing uploaded.",
-        "hero.install": "Install userscript",
+        "hero.install": "Get script",
         "hero.github": "View GitHub",
         "hero.metaAria": "Project facts",
         "hero.meta.local": "Local storage",
@@ -3048,6 +3772,7 @@
         "board.local": "Stored on this browser",
         "board.tabsAria": "Four panel views",
         "board.sample": "Sample data",
+        "board.note": "Sample preview · appears on Bilibili once the script runs",
         "tab.today": "Today",
         "tab.week": "Week",
         "tab.all": "All",
@@ -3083,6 +3808,14 @@
         "privacy.title": "Your data follows exactly one path.",
         "privacy.copy": "From Bilibili playback events to local storage, and on to the export file you choose to create, the whole path stays inside your browser. The project has no account system, no backend, and never uploads viewing data.",
         "privacy.routeAria": "Local data handling path",
+        "privacy.platformNote": "Runs only on desktop Chrome or Edge with Tampermonkey installed. Mobile browsers cannot run the script.",
+        "faq.title": "Frequently asked",
+        "faq.q1": "What happens if I clear my browser data?",
+        "faq.a1": "Watch records live in browser local storage. Clearing browser data, site data, or uninstalling the extension deletes them for good. Export a JSON backup from the panel on a regular basis.",
+        "faq.q2": "How do I move to another browser or computer?",
+        "faq.a2": "Install the script in the new environment, then use Import in the panel to pick the JSON file you exported earlier. Records merge in by date. The two machines do not sync automatically.",
+        "faq.q3": "Does the script upload my watch data?",
+        "faq.a3": "No. The script only reads and writes local storage in your browser. Its one outbound request asks a public Bilibili endpoint for a video title and carries no duration or progress data.",
         "privacy.server": "Server path not connected",
         "privacy.n1.code": "Source 01",
         "privacy.n1.title": "Bilibili playback events",
@@ -3098,7 +3831,7 @@
         "privacy.f3": "Open-source license",
         "install.title": "Start keeping a draft of your own watching today.",
         "install.copy": "Install Tampermonkey, then click to install the userscript. On any Bilibili page a draggable watch-data entry appears on the right.",
-        "install.cta": "Get v0.9.1",
+        "install.cta": "Get script",
         "install.guide": "Read the install guide",
         "install.sideAria": "Project destination facts",
         "install.code": "Destination",
@@ -3111,6 +3844,7 @@
         "install.m4": "Version",
         "footer.copy": "Bilibili Watch Panel is a Tampermonkey userscript that runs entirely locally. The data in the page screenshots comes from a sample browser on this machine and is shown only to illustrate the interface.",
         "footer.status": "Runs locally · no server",
+        "footer.statusTip": "All data stays in your browser and is never uploaded",
         "footer.colProject": "Project",
         "footer.colDocs": "Docs",
         "footer.readme": "Getting started",
@@ -3187,6 +3921,8 @@
 
       document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
       document.querySelectorAll("[data-i18n-aria-label]").forEach((el) => { el.setAttribute("aria-label", t(el.dataset.i18nAriaLabel)); });
+      // CSS 气泡的内容来自 data-tip，需随语言一起切换
+      document.querySelectorAll("[data-i18n-tip]").forEach((el) => { el.setAttribute("data-tip", t(el.dataset.i18nTip)); });
 
       const title = document.querySelector("title");
       if (title) title.textContent = t("meta.title");
@@ -3510,9 +4246,73 @@
       syncNav();
     }
 
+    // 顶栏滚动状态：离开首屏后由透明变为带模糊的实底，让内容在其下滚动时仍保有层次
+    const siteHeader = document.querySelector("[data-site-header]");
+    if (siteHeader) {
+      const SCROLLED_AT = 24;
+      let headerFrame = 0;
+      const syncHeader = () => {
+        siteHeader.classList.toggle("is-scrolled", window.scrollY > SCROLLED_AT);
+      };
+      const onHeaderScroll = () => {
+        if (headerFrame) return;
+        headerFrame = requestAnimationFrame(() => {
+          headerFrame = 0;
+          syncHeader();
+        });
+      };
+      window.addEventListener("scroll", onHeaderScroll, { passive: true });
+      window.addEventListener("resize", onHeaderScroll);
+      syncHeader();
+    }
+
+    // 汉堡菜单：仅在窄屏出现，展开/收起区块导航面板
+    const navToggle = document.getElementById("navToggle");
+    if (navToggle && siteNav) {
+      const mobileNav = window.matchMedia("(max-width: 840px)");
+      let navOpen = false;
+
+      const setNavOpen = (open) => {
+        navOpen = open;
+        navToggle.setAttribute("aria-expanded", String(open));
+        siteNav.dataset.navOpen = String(open);
+      };
+
+      navToggle.addEventListener("click", () => setNavOpen(!navOpen));
+
+      // 选中某一条后即收起，避免面板盖住刚滚到的内容
+      siteNav.querySelectorAll("a[data-nav-section]").forEach((link) => {
+        link.addEventListener("click", () => setNavOpen(false));
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && navOpen) {
+          setNavOpen(false);
+          navToggle.focus();
+        }
+      });
+
+      // 点面板以外区域收起
+      document.addEventListener("pointerdown", (event) => {
+        if (!navOpen) return;
+        if (siteHeader && siteHeader.contains(event.target)) return;
+        setNavOpen(false);
+      });
+
+      // 视口回到桌面宽度时复位，避免残留的展开态影响桌面布局
+      const resetOnDesktop = () => {
+        if (!mobileNav.matches) setNavOpen(false);
+      };
+      mobileNav.addEventListener("change", resetOnDesktop);
+      resetOnDesktop();
+    }
+
+    // 分割线的展开与 .reveal 同一套观察逻辑：进入视口后播放一次，然后解除观察
+    const ruleItems = document.querySelectorAll(".section-rule");
     const revealItems = document.querySelectorAll(".reveal");
     if (reduceMotion.matches || !("IntersectionObserver" in window)) {
       revealItems.forEach((item) => item.classList.add("is-visible"));
+      ruleItems.forEach((item) => item.classList.add("is-visible"));
     } else {
       const observer = new IntersectionObserver((entries) => {
         entries.forEach((entry) => {
@@ -3522,6 +4322,66 @@
         });
       }, { threshold: 0.12, rootMargin: "0px 0px -8% 0px" });
       revealItems.forEach((item) => observer.observe(item));
+      // 分割线所在区块很高，阈值取小值，保证刚露头就展开
+      const ruleObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add("is-visible");
+          ruleObserver.unobserve(entry.target);
+        });
+      }, { threshold: 0.02, rootMargin: "0px 0px -4% 0px" });
+      ruleItems.forEach((item) => ruleObserver.observe(item));
+    }
+
+    // 时间轴：进入视口后节点从左到右依次点亮
+    const timelinePlates = document.querySelectorAll(".timeline-plate");
+    if (timelinePlates.length) {
+      if (reduceMotion.matches || !("IntersectionObserver" in window)) {
+        timelinePlates.forEach((plate) => plate.classList.add("is-lit"));
+      } else {
+        const timelineObserver = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            entry.target.classList.add("is-lit");
+            timelineObserver.unobserve(entry.target);
+          });
+        }, { threshold: 0.2, rootMargin: "0px 0px -6% 0px" });
+        timelinePlates.forEach((plate) => timelineObserver.observe(plate));
+      }
+    }
+
+    // 隐私路线：进入视口后绿色连线从左向右绘制，三个盒子依次淡入
+    const privacyRoutes = document.querySelectorAll(".privacy-route");
+    if (privacyRoutes.length) {
+      if (reduceMotion.matches || !("IntersectionObserver" in window)) {
+        privacyRoutes.forEach((route) => route.classList.add("is-drawn"));
+      } else {
+        const routeObserver = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            entry.target.classList.add("is-drawn");
+            routeObserver.unobserve(entry.target);
+          });
+        }, { threshold: 0.24, rootMargin: "0px 0px -6% 0px" });
+        privacyRoutes.forEach((route) => routeObserver.observe(route));
+      }
+    }
+
+    // 第六屏票根：进入视口后从右侧滑入
+    const destinationPlates = document.querySelectorAll(".destination-plate");
+    if (destinationPlates.length) {
+      if (reduceMotion.matches || !("IntersectionObserver" in window)) {
+        destinationPlates.forEach((plate) => plate.classList.add("is-settled"));
+      } else {
+        const plateObserver = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            entry.target.classList.add("is-settled");
+            plateObserver.unobserve(entry.target);
+          });
+        }, { threshold: 0.2, rootMargin: "0px 0px -6% 0px" });
+        destinationPlates.forEach((plate) => plateObserver.observe(plate));
+      }
     }
 
     // 先落地主题与语言（不带持久化，避免覆盖用户已有选择），再渲染视图
@@ -3532,6 +4392,29 @@
       const preload = new Image();
       preload.src = view.image;
     });
+
+    // 预加载：等关键图片就绪（最多 2.5 秒）后淡出并移除节点。
+    // 用 Promise.race 兜底，避免某张图挂住导致遮罩永不消失。
+    const preloader = document.getElementById("preloader");
+    if (preloader) {
+      const firstImage = document.getElementById("boardPreviewImage");
+      const ready = firstImage && firstImage.complete
+        ? Promise.resolve()
+        : new Promise((resolve) => {
+            if (!firstImage) return resolve();
+            firstImage.addEventListener("load", resolve, { once: true });
+            firstImage.addEventListener("error", resolve, { once: true });
+          });
+      const timeout = new Promise((resolve) => setTimeout(resolve, 2500));
+      Promise.race([ready, timeout]).then(() => {
+        requestAnimationFrame(() => {
+          preloader.classList.add("is-done");
+          preloader.addEventListener("transitionend", () => preloader.remove(), { once: true });
+          // transitionend 在 reduce 下可能不触发，再兜一层
+          setTimeout(() => preloader.remove(), 900);
+        });
+      });
+    }
 
     const starChip = document.querySelector("[data-stars]");
     if (starChip) {
