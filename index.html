@@ -1936,14 +1936,28 @@
       line-height: 1.6;
     }
 
+    /* 隐私区改为单一居中列。
+       原先是 minmax(300px,0.62fr) / minmax(0,1.38fr) 两列网格，但左列只有一段
+       约 200px 高的文字，却被网格拉伸到与右列等高的 977px —— 下半部分因此留下
+       481px 宽的空白带。单列后正文通栏，阅读顺序由 DOM 与 order 显式给出：
+       标题正文 -> 数据链路 -> 指标铭牌 -> 环境提示 -> 常见问题。 */
+    /* 宽度与「概况」(#records) 的 .measurement-layout 对齐：
+       两者都直接铺满 .shell（min(1600px,100%) 减去两侧 gutter），
+       这里不再写死 max-width —— 那会让本区块在大屏上比概况窄一截。
+       需要阅读行宽的元素（指标铭牌、环境提示、常见问题）各自带 max-width 居中。 */
     .privacy-layout {
-      display: grid;
-      grid-template-columns: minmax(300px, 0.62fr) minmax(0, 1.38fr);
-      gap: clamp(52px, 8vw, 136px);
+      display: block;
+      margin: 0 auto;
+    }
+
+    /* 内容次序：DOM 里 .privacy-copy 排在数据链路之前，这里不重排，
+       只在数据链路与指标区之间留出段落级间距。 */
+    .privacy-layout > .reveal {
+      margin-top: 46px;
     }
 
     .privacy-copy p {
-      max-width: 31rem;
+      max-width: 34rem;
       margin: 30px 0 0;
       font-size: 1.01rem;
       line-height: 1.95;
@@ -2292,22 +2306,28 @@
       transform: translateY(-50%);
     }
 
-    /* 指标区：三张等宽铭牌。
-       材质刻意与上方三步流程卡片（.route-node）完全一致 ——
-       同一个 --surface-line 细边、同一个 --surface 底色、同一个 --elev-1
-       微内阴影、同一个 10px 圆角。改这里就要同步改 .route-node。 */
+    /* 指标区：三条属性标签，横向一排、单元等宽、整行居中。
+       刻意不做「大数字 + 小标签」的 hero-metric 模板 —— 数字与说明**同行**，
+       中间用一道 1px 竖向接缝分开，接缝本身就是这个词条的语法。
+       材质与上方流程卡片（.route-node）一致：同一个 --surface-line 细边、
+       同一个 --surface 底色、同一个 --elev-1 微内阴影、同一个 10px 圆角。
+       改这里就要同步改 .route-node。 */
+    /* 宽度基准：与首页概况 .measurement-layout 一致 —— 不设 max-width，
+       直接继承 .shell（min(1600px,100%) 减两侧 gutter）。
+       需要收窄阅读行宽的元素（每张卡片内的说明文字）各自带 max-width。 */
     .privacy-facts {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 14px;
-      margin-top: 34px;
+      width: 100%;
+      margin: 34px 0 0;
     }
 
     .privacy-fact {
-      display: grid;
-      align-content: start;
-      gap: 10px;
-      padding: 22px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 20px;
       border: 1px solid var(--surface-line);
       border-radius: 10px;
       background: var(--surface);
@@ -2335,46 +2355,45 @@
     .privacy-fact:nth-child(2) { --fact-delay: 110ms; }
     .privacy-fact:nth-child(3) { --fact-delay: 220ms; }
 
-    /* hover：边框提亮、底色微提亮、数字轻微放大。
+    /* hover：边框提亮、底色微提亮。
        边框用 --route 绿（与上方三步流程卡片完全同一套反馈语言），
        不用 --ring-c 粉 —— 粉色在本页专属「信号/警示」，一张宣称
-       零上传的卡片闪粉会读成告警。
-       放大用独立的 scale 属性而不是 transform ——
-       transform 已被入场动画占用，两者会互斥。 */
+       零上传的卡片闪粉会读成告警。 */
     .privacy-fact:hover {
       border-color: var(--route);
       background: var(--card-hover);
       box-shadow: var(--elev-2);
     }
 
-    /* `0` 是核心卖点（零上传请求），给最大视觉权重与粉色；
-       后两个用浅白，形成明确主次。 */
+    /* `0` 是核心卖点（零上传请求），给粉色；
+       后两个用浅白，形成明确主次。三者字号一致，主次由颜色承担。 */
     .privacy-fact strong {
-      display: block;
+      flex: none;
       color: var(--enamel);
       font-family: var(--measure);
-      font-size: clamp(1.9rem, 3vw, 2.6rem);
+      font-size: clamp(1.6rem, 2.2vw, 2.1rem);
       font-variant-numeric: tabular-nums;
       font-weight: 600;
       letter-spacing: -0.02em;
       line-height: 1;
-      transform-origin: 0 50%;
-      scale: 1;
-      transition: scale 320ms var(--ease-out), color 300ms var(--ease-out);
+      transition: color 300ms var(--ease-out);
     }
 
     .privacy-fact:first-child strong {
       color: var(--signal-text);
     }
 
-    .privacy-fact:hover strong {
-      scale: 1.02;
-    }
-
+    /* 数字与说明之间的竖向接缝：1px 机械接缝，不是装饰性分隔符。
+       说明文字限 22em（中文字宽单位，ch 只按数字零位宽算，会砍掉一半），
+       卡片变宽后靠这个上限保持可读行宽，而不是把整块卡片再收窄。 */
     .privacy-fact span {
+      padding-left: 14px;
+      border-left: 1px solid var(--surface-line);
+      max-width: 22em;
       color: var(--muted);
       font-size: 0.78rem;
-      line-height: 1.6;
+      line-height: 1.55;
+      text-wrap: pretty;
     }
 
     /* ---- 预加载 ---- */
@@ -2418,9 +2437,12 @@
     }
 
     /* 前置风险提示：用左侧一道竖线而不是整块底色，
-       既醒目又不与上方的指标区抢重量。 */
+       既醒目又不与上方的指标区抢重量。整行居中在单一容器内。 */
+    /* 宽度同基准：外层铺满 .shell，行宽靠 max-width 收在文字上，
+       粉竖线跟着文字一起走（不再是被居中窄块切断的一整条）。 */
     .platform-note {
-      margin-top: 28px;
+      max-width: 46em;
+      margin: 28px 0 0;
       padding: 14px 0 14px 16px;
       border-left: 2px solid var(--signal);
       color: var(--muted);
@@ -2444,46 +2466,70 @@
       color: var(--enamel);
     }
 
-    /* ---- 常见问题（互斥手风琴） ---- */
+    /* ---- 常见问题：评论楼层 ---- */
+    /* 结构语言取自 B 站深色模式评论区：一条主评论（提问）+ 一条楼中楼内嵌回复
+       （回答）。这里只借排版结构，不借它的交互 —— 没有点赞、时间、回复按钮。
+       卡片材质与指标铭牌、上方流程卡片一致：
+       --surface-line 细边 / --surface 底色 / --elev-1 / 10px 圆角。 */
+    /* 宽度同基准：外层铺满 .shell，行宽靠 .faq-list 的 max-width 收窄，
+       标题行与列表左对齐（不再整块居中）。 */
     .faq {
-      margin-top: 46px;
+      width: 100%;
+      margin: 46px 0 0;
       padding-top: 30px;
       border-top: 1px solid var(--line);
     }
 
+    /* 区标题与左侧一道短竖线组成标题行，代替装饰性眉标 */
     .faq-title {
-      margin-bottom: 18px;
-      font-family: var(--measure);
-      font-size: 0.7rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 18px;
+      color: var(--enamel);
+      font-family: var(--display);
+      font-size: clamp(1.1rem, 1.6vw, 1.32rem);
       font-weight: 600;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      color: var(--meta-dim);
+      letter-spacing: -0.01em;
+      line-height: 1.4;
     }
 
+    .faq-title::before {
+      flex: none;
+      width: 3px;
+      height: 1em;
+      content: "";
+      background: var(--signal);
+    }
+
+    /* 楼层列表的行宽上限在这里，不在外层容器上 */
     .faq-list {
       display: grid;
-      gap: 10px;
+      gap: 16px;
+      max-width: 820px;
       margin: 0;
+      padding: 0;
+      list-style: none;
     }
 
-    /* 每一条是独立圆角卡片，材质与指标区、流程卡片一致 */
+    /* 一条主评论 = 一个楼层。材质与指标区、流程卡片一致。 */
     .faq-item {
       border: 1px solid var(--surface-line);
       border-radius: 10px;
       background: var(--surface);
       box-shadow: var(--elev-1);
-      overflow: hidden;
       transition: border-color 300ms var(--ease-out),
         background-color 300ms var(--ease-out),
         box-shadow 300ms var(--ease-out),
-        opacity 620ms var(--ease-out) var(--faq-delay, 0ms),
-        transform 620ms var(--ease-out) var(--faq-delay, 0ms);
+        opacity 560ms var(--ease-out) var(--faq-delay, 0ms),
+        transform 560ms var(--ease-out) var(--faq-delay, 0ms);
     }
 
+    /* 入场：进入视口后自上而下依次淡入上浮，一次性播放。
+       560ms / 90ms 错峰，ease-out，无弹跳。 */
     .js-motion .faq-item {
       opacity: 0;
-      transform: translate3d(0, 14px, 0);
+      transform: translate3d(0, 12px, 0);
     }
 
     .js-motion .faq.is-visible .faq-item {
@@ -2492,106 +2538,214 @@
     }
 
     .faq-item:nth-child(1) { --faq-delay: 0ms; }
-    .faq-item:nth-child(2) { --faq-delay: 120ms; }
-    .faq-item:nth-child(3) { --faq-delay: 240ms; }
+    .faq-item:nth-child(2) { --faq-delay: 90ms; }
+    .faq-item:nth-child(3) { --faq-delay: 180ms; }
 
-    .faq-item:hover,
-    .faq-item[data-open="true"] {
+    .faq-item:hover {
       border-color: var(--route);
       background: var(--card-hover);
-    }
-
-    .faq-item[data-open="true"] {
       box-shadow: var(--elev-2);
     }
 
-    /* 用 button 而不是 dt，键盘与读屏都能直接操作 */
-    .faq-question {
+    /* 主评论头行：圆形匿名头像 + Lv 徽章 + 楼号
+       间距用 10px 的紧凑组，与楼层正文之间留 14px，
+       形成「头行是元信息、正文是内容」的分组节奏。 */
+    .faq-floor-head {
       display: flex;
-      width: 100%;
       align-items: center;
-      justify-content: space-between;
-      gap: 18px;
-      padding: 18px 20px;
-      border: 0;
-      background: none;
+      gap: 10px;
+      padding: 16px 20px 0;
+    }
+
+    /* 匿名头像：不是装饰性状态点，是「这是一条匿名发言」的记号。
+       两种记号（实心 / 空心）都用同一个中性色，避免把颜色读成身份。 */
+    .faq-avatar {
+      flex: none;
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border: 1px solid var(--surface-line);
+      border-radius: 50%;
+      background: var(--surface-soft);
+      color: var(--meta-dim);
+    }
+
+    .faq-avatar svg {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+      stroke-width: 1.6;
+      fill: none;
+    }
+
+    /* 楼中楼的小头像：同一记号，缩到 20px */
+    .faq-reply-avatar {
+      width: 20px;
+      height: 20px;
+    }
+
+    .faq-reply-avatar svg {
+      width: 10px;
+      height: 10px;
+    }
+
+    /* Lv 徽章：这是「等级刻度」，所以走测量层的语言
+       （Bahnschrift Condensed、tabular-nums、紧凑全大写拉丁），
+       与页面其它刻度标签同源。
+       底色是低饱和深橙 #9c5a34：白字对比度 5.35:1，两种主题下都过。
+       不使用 B 站原版亮橙 #fb7299（违反低饱和深色主题的约束），
+       也不用更浅的 #c2734f —— 那个配白字只有 3.58:1，达不到正文 4.5。 */
+    .faq-lv {
+      flex: none;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: #9c5a34;
+      color: #fff;
+      font-family: var(--measure);
+      font-size: 0.7rem;
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      line-height: 1.45;
+      text-transform: uppercase;
+    }
+
+    /* 楼号与示例标注：次要文字，降低透明度 */
+    .faq-floor-no {
+      color: var(--meta-dim);
+      font-family: var(--measure);
+      font-size: 0.7rem;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.04em;
+    }
+
+    /* 主评论正文（提问）：更粗更亮 */
+    .faq-question {
+      display: block;
+      margin: 0;
+      padding: 12px 20px 0;
       color: var(--enamel);
-      font-size: 0.94rem;
+      font-size: 1rem;
       font-weight: 650;
       line-height: 1.6;
-      text-align: left;
-      cursor: pointer;
-      transition: color 300ms var(--ease-out);
+      text-wrap: pretty;
     }
 
-    .faq-question:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: -3px;
-      border-radius: 10px;
-    }
-
-    /* 箭头：一个方框旋转 45 度即成「拐角」，展开时转 180 度成反向拐角 */
-    .faq-caret {
-      flex: none;
-      position: relative;
-      width: 16px;
-      height: 16px;
-      border-right: 1.5px solid var(--muted);
-      border-bottom: 1.5px solid var(--muted);
-      transform: rotate(45deg);
-      transform-origin: 60% 60%;
-      transition: transform 400ms var(--ease-out), border-color 300ms var(--ease-out);
-    }
-
-    .faq-item[data-open="true"] .faq-caret {
-      transform: rotate(225deg);
-      border-color: var(--route);
-    }
-
-    /* 展开动画用 grid-template-rows 的 0fr -> 1fr，
-       而不是 max-height：max-height 是在动布局属性，既有抖动
-       也需要猜一个够大的上限；grid 的行高过渡是浏览器原生支持的
-       收起/展开手法，且不依赖魔法数字。 */
+    /* 楼中楼回复：从主评论下方缩进嵌入，模拟 B 站回复嵌套。
+       用一道 1px 左接缝而不是嵌套卡片 —— 嵌套卡片是明确的反面教材，
+       而这里需要的是「这一条挂在上面那条下面」的从属关系。 */
     .faq-answer {
-      display: grid;
-      grid-template-rows: 0fr;
-      overflow: hidden;
-      transition: grid-template-rows 420ms var(--ease-out);
+      margin: 12px 20px 20px 32px;
+      padding-left: 16px;
+      border-left: 1px solid var(--surface-line);
     }
 
-    .faq-item[data-open="true"] .faq-answer {
-      grid-template-rows: 1fr;
+    .faq-reply-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 7px;
     }
 
-    /* grid 的过渡要求子元素自身 min-height 为 0，否则内容会把行撑开。
-       下内边距不能留在 p 上 —— 收起时 0fr 只压掉内容高度，
-       p 的 padding 仍会占位，答案会露出 20px。改由外层给间距。 */
-    .faq-answer > p {
-      min-height: 0;
+    /* 回答正文：亮度降低、字号略小 */
+    .faq-answer p {
       margin: 0;
-      padding: 0 20px;
-      max-width: 58ch;
+      max-width: 62ch;
       color: var(--muted);
-      font-size: 0.82rem;
+      font-size: 0.84rem;
       line-height: 1.85;
       text-wrap: pretty;
-      opacity: 0;
-      transition: opacity 340ms var(--ease-out) 90ms;
     }
 
-    /* 收起时把整块的下内边距也一并收掉，展开时才让出 20px 底距 */
-    .faq-answer {
-      padding-bottom: 0;
-      transition: grid-template-rows 420ms var(--ease-out),
-        padding-bottom 420ms var(--ease-out);
+    /* ---- 楼层操作行：把「这条发言可被回应」这件事做成真的控件 ----
+       布局：计数按钮在左，次级按钮在右（用 margin-left:auto 收尾），
+       与正文之间留 14px，与卡片下边距一起构成收束。 */
+    .faq-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 20px 16px;
     }
 
-    .faq-item[data-open="true"] .faq-answer {
-      padding-bottom: 20px;
+    /* 文字按钮：测量层语言（小号、全大写拉丁刻度感、tabular-nums 数字），
+       中性色起步，hover 才提亮 —— 不抢正文重量。 */
+    .faq-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 32px;
+      padding: 0 10px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--meta-dim);
+      font-family: var(--ui);
+      font-size: 0.76rem;
+      line-height: 1;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: color 220ms var(--ease-out), background-color 220ms var(--ease-out),
+        border-color 220ms var(--ease-out);
     }
 
-    .faq-item[data-open="true"] .faq-answer > p {
-      opacity: 1;
+    .faq-action svg {
+      width: 15px;
+      height: 15px;
+      flex: none;
+      stroke: currentColor;
+      stroke-width: 1.7;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      transition: fill 220ms var(--ease-out), transform 220ms var(--ease-out);
+    }
+
+    .faq-action:hover {
+      border-color: var(--surface-line);
+      background: var(--card-hover);
+      color: var(--enamel);
+    }
+
+    .faq-action:focus-visible {
+      outline: 2px solid var(--route);
+      outline-offset: 2px;
+    }
+
+    /* 已赞：唯一的情绪色出现在这里，用信号粉的文本安全变体。
+       图标实心化 + 轻微上跳，让状态变化不止靠颜色。 */
+    .faq-action[aria-pressed="true"] {
+      color: var(--signal-text);
+    }
+
+    .faq-action[aria-pressed="true"] svg {
+      fill: currentColor;
+    }
+
+    .faq-action[aria-pressed="true"] .faq-like-count {
+      font-weight: 600;
+    }
+
+    /* 计数用等宽数字，避免 9 → 10 时按钮宽度跳动 */
+    .faq-like-count {
+      font-family: var(--measure);
+      font-size: 0.74rem;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.02em;
+    }
+
+    /* 回复/举报是次级操作，推到右侧，与左侧点赞拉开层级 */
+    .faq-action.is-secondary {
+      margin-left: auto;
+    }
+
+    .faq-action.is-secondary + .faq-action {
+      margin-left: 0;
+    }
+
+    /* 楼中楼回复自带一条小操作行，与主楼操作行区分：更小、更靠左 */
+    .faq-answer .faq-actions {
+      padding: 10px 0 0;
     }
 
     .install {
@@ -3446,21 +3600,36 @@
       }
 
       .privacy-fact {
-        padding: 18px 16px;
+        padding: 15px 16px;
+        gap: 12px;
       }
 
-      /* 单列堆叠时数字可以更大一些，充分利用手机宽度 */
       .privacy-fact strong {
-        font-size: clamp(2rem, 9vw, 2.6rem);
+        font-size: 1.6rem;
+      }
+
+      .privacy-fact span {
+        padding-left: 12px;
+      }
+
+      /* 手机上楼中楼回复的缩进收窄，把宽度留给正文 */
+      .faq-floor-head {
+        padding: 14px 16px 0;
+        gap: 8px;
       }
 
       .faq-question {
-        padding: 16px 16px;
-        font-size: 0.9rem;
+        padding: 11px 16px 0;
+        font-size: 0.95rem;
+      }
+
+      .faq-answer {
+        margin: 11px 16px 16px 24px;
+        padding-left: 13px;
       }
 
       .faq-answer p {
-        padding: 0 16px 18px;
+        font-size: 0.82rem;
       }
 
       .destination-side {
@@ -3537,7 +3706,8 @@
         transition-duration: 0.01ms !important;
       }
 
-      /* 下半部分的入场一律直接呈现终态，手风琴也不再滑动 */
+      /* 下半部分的入场一律直接呈现终态。
+         楼层现在是静态内容，没有可折叠的部分，所以只需要归位。 */
       .privacy-fact,
       .platform-note,
       .faq-item,
@@ -3545,19 +3715,6 @@
       .faq-answer p {
         opacity: 1 !important;
         transform: none !important;
-        transition: none !important;
-      }
-
-      /* 收起状态在 reduce 下仍需真正隐藏，否则答案会一直露着 */
-      .faq-item:not([data-open="true"]) .faq-answer {
-        grid-template-rows: 0fr !important;
-      }
-
-      .faq-item:not([data-open="true"]) .faq-answer > p {
-        opacity: 0 !important;
-      }
-
-      .faq-caret {
         transition: none !important;
       }
 
@@ -3918,34 +4075,113 @@
             仅支持PC端 Chrome / Edge 等可安装 Tampermonkey 的浏览器，移动端暂无法运行脚本。
           </p>
 
+          <!-- 常见问题：B 站深色模式评论楼层结构。
+               一条主评论（提问）+ 一条楼中楼内嵌回复（回答）。
+               只借排版结构，不借交互：没有点赞、时间、回复按钮。
+               楼层里的头像与 Lv 等级都是示例记号，三处各标注一次「示例」。 -->
           <div class="faq">
             <h3 class="faq-title" data-i18n="faq.title">常见问题</h3>
             <div class="faq-list">
               <div class="faq-item">
-                <button class="faq-question" type="button" aria-expanded="false" aria-controls="faqAnswer1">
-                  <span data-i18n="faq.q1">清除浏览器数据会怎样？</span>
-                  <span class="faq-caret" aria-hidden="true"></span>
-                </button>
-                <div class="faq-answer" id="faqAnswer1">
-                  <p data-i18n="faq.a1">观看记录保存在浏览器本地存储。一旦清除浏览器站点数据、卸载扩展，记录会被直接删除且无法找回。建议定期使用面板导出JSON文件做好备份。</p>
+                <div class="faq-floor-head">
+                  <span class="faq-avatar" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="8" cy="5.6" r="2.9" fill="currentColor" stroke="none" />
+                      <path d="M2.6 14c0-3 2.4-4.7 5.4-4.7s5.4 1.7 5.4 4.7" />
+                    </svg>
+                  </span>
+                  <span class="faq-lv">Lv6</span>
+                  <span class="faq-floor-no" data-i18n="faq.floor1">#1楼 · 匿名读者 · 示例</span>
+                </div>
+                <p class="faq-question" data-i18n="faq.q1">清除浏览器数据会怎样？</p>
+                <div class="faq-answer">
+                  <div class="faq-reply-head">
+                    <span class="faq-avatar faq-reply-avatar" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="8" cy="5.6" r="2.9" />
+                        <path d="M2.6 14c0-3 2.4-4.7 5.4-4.7s5.4 1.7 5.4 4.7" />
+                      </svg>
+                    </span>
+                    <span class="faq-lv" data-i18n="faq.replyLv">Lv5</span>
+                    <span class="faq-floor-no" data-i18n="faq.replyAuthor">作者回复</span>
+                  </div>
+                  <p data-i18n="faq.a1">脚本产生的观看记录全部保存在当前浏览器的本地存储空间中，不会存在云端。当你清除网站站点数据、清除浏览器缓存、重置浏览器或者直接卸载 Tampermonkey 扩展时，本地存储的全部观看统计数据会被浏览器直接清除，删除之后无法恢复。强烈建议养成定期备份习惯，在脚本面板使用导出功能，把记录导出为 JSON 文件，保存在本地磁盘，防止数据意外丢失。</p>
+                </div>
+                <div class="faq-actions">
+                  <button type="button" class="faq-action faq-like" aria-pressed="false" data-i18n-aria-label="faq.likeAria" aria-label="点赞这条回答">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.2 14V7.1l3-5.1a1.4 1.4 0 0 1 2.5 1.1L10 6.2h3.1a1.5 1.5 0 0 1 1.5 1.8l-.9 4.6a1.7 1.7 0 0 1-1.7 1.4H5.2Z" /><path d="M5.2 7.1H2.6V14h2.6" /></svg>
+                    <span class="faq-like-count">24</span>
+                  </button>
+                  <button type="button" class="faq-action is-secondary" data-i18n="faq.reply">回复</button>
+                  <button type="button" class="faq-action" data-i18n="faq.report">举报</button>
                 </div>
               </div>
               <div class="faq-item">
-                <button class="faq-question" type="button" aria-expanded="false" aria-controls="faqAnswer2">
-                  <span data-i18n="faq.q2">换浏览器或换电脑怎么迁移？</span>
-                  <span class="faq-caret" aria-hidden="true"></span>
-                </button>
-                <div class="faq-answer" id="faqAnswer2">
-                  <p data-i18n="faq.a2">在新环境装好脚本后，在面板使用「导入」功能，选中之前导出的JSON文件，记录会按日期合并。多台设备数据不会自动同步，需要手动导入迁移。</p>
+                <div class="faq-floor-head">
+                  <span class="faq-avatar" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="8" cy="5.6" r="2.9" />
+                      <path d="M2.6 14c0-3 2.4-4.7 5.4-4.7s5.4 1.7 5.4 4.7" />
+                    </svg>
+                  </span>
+                  <span class="faq-lv">Lv6</span>
+                  <span class="faq-floor-no" data-i18n="faq.floor2">#2楼 · 匿名读者 · 示例</span>
+                </div>
+                <p class="faq-question" data-i18n="faq.q2">换浏览器或换电脑怎么迁移？</p>
+                <div class="faq-answer">
+                  <div class="faq-reply-head">
+                    <span class="faq-avatar faq-reply-avatar" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="8" cy="5.6" r="2.9" fill="currentColor" stroke="none" />
+                        <path d="M2.6 14c0-3 2.4-4.7 5.4-4.7s5.4 1.7 5.4 4.7" />
+                      </svg>
+                    </span>
+                    <span class="faq-lv" data-i18n="faq.replyLv">Lv5</span>
+                    <span class="faq-floor-no" data-i18n="faq.replyAuthor">作者回复</span>
+                  </div>
+                  <p data-i18n="faq.a2">脚本本身没有云端自动同步功能，多设备之间数据不会自动互通。更换浏览器、换新电脑时，先在新环境安装好 Tampermonkey 并部署脚本，打开脚本管理面板，找到导入功能，选择你之前导出保存好的 JSON 备份文件。导入后，新旧记录会按照视频观看时间自动合并，重复条目会自动去重。每次更换设备前记得先导出备份文件，手动完成跨设备迁移。</p>
+                </div>
+                <div class="faq-actions">
+                  <button type="button" class="faq-action faq-like" aria-pressed="false" data-i18n-aria-label="faq.likeAria" aria-label="点赞这条回答">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.2 14V7.1l3-5.1a1.4 1.4 0 0 1 2.5 1.1L10 6.2h3.1a1.5 1.5 0 0 1 1.5 1.8l-.9 4.6a1.7 1.7 0 0 1-1.7 1.4H5.2Z" /><path d="M5.2 7.1H2.6V14h2.6" /></svg>
+                    <span class="faq-like-count">17</span>
+                  </button>
+                  <button type="button" class="faq-action is-secondary" data-i18n="faq.reply">回复</button>
+                  <button type="button" class="faq-action" data-i18n="faq.report">举报</button>
                 </div>
               </div>
               <div class="faq-item">
-                <button class="faq-question" type="button" aria-expanded="false" aria-controls="faqAnswer3">
-                  <span data-i18n="faq.q3">脚本会上传我的观看数据吗？</span>
-                  <span class="faq-caret" aria-hidden="true"></span>
-                </button>
-                <div class="faq-answer" id="faqAnswer3">
-                  <p data-i18n="faq.a3">不会。脚本只会在浏览器本地读写存储。唯一的外部请求是访问B站公开接口获取视频标题，不会上传你的观看时长、播放进度等任何观看记录。</p>
+                <div class="faq-floor-head">
+                  <span class="faq-avatar" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="8" cy="5.6" r="2.9" fill="currentColor" stroke="none" />
+                      <path d="M2.6 14c0-3 2.4-4.7 5.4-4.7s5.4 1.7 5.4 4.7" />
+                    </svg>
+                  </span>
+                  <span class="faq-lv">Lv6</span>
+                  <span class="faq-floor-no" data-i18n="faq.floor3">#3楼 · 匿名读者 · 示例</span>
+                </div>
+                <p class="faq-question" data-i18n="faq.q3">脚本会上传我的观看数据吗？</p>
+                <div class="faq-answer">
+                  <div class="faq-reply-head">
+                    <span class="faq-avatar faq-reply-avatar" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="8" cy="5.6" r="2.9" />
+                        <path d="M2.6 14c0-3 2.4-4.7 5.4-4.7s5.4 1.7 5.4 4.7" />
+                      </svg>
+                    </span>
+                    <span class="faq-lv" data-i18n="faq.replyLv">Lv5</span>
+                    <span class="faq-floor-no" data-i18n="faq.replyAuthor">作者回复</span>
+                  </div>
+                  <p data-i18n="faq.a3">不会上传你的任何个人观看记录。脚本所有观看时长、播放历史、进度统计都只在浏览器本地读写存储。脚本仅有的外部网络请求，只是调用 B 站公开开放接口获取视频标题、封面这类公开视频元信息，不会收集、上报、上传你的播放进度、观看时长、浏览历史等任何属于你的个人观看数据，所有统计信息只保存在你本机浏览器。</p>
+                </div>
+                <div class="faq-actions">
+                  <button type="button" class="faq-action faq-like" aria-pressed="false" data-i18n-aria-label="faq.likeAria" aria-label="点赞这条回答">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.2 14V7.1l3-5.1a1.4 1.4 0 0 1 2.5 1.1L10 6.2h3.1a1.5 1.5 0 0 1 1.5 1.8l-.9 4.6a1.7 1.7 0 0 1-1.7 1.4H5.2Z" /><path d="M5.2 7.1H2.6V14h2.6" /></svg>
+                    <span class="faq-like-count">31</span>
+                  </button>
+                  <button type="button" class="faq-action is-secondary" data-i18n="faq.reply">回复</button>
+                  <button type="button" class="faq-action" data-i18n="faq.report">举报</button>
                 </div>
               </div>
             </div>
@@ -4168,12 +4404,21 @@
         "privacy.routeAria": "本地数据处理路径",
         "privacy.platformNote": "仅支持PC端 Chrome / Edge 等可安装 Tampermonkey 的浏览器，移动端暂无法运行脚本。",
         "faq.title": "常见问题",
+        "faq.floor1": "#1楼 · 匿名读者 · 示例",
+        "faq.floor2": "#2楼 · 匿名读者 · 示例",
+        "faq.floor3": "#3楼 · 匿名读者 · 示例",
+        "faq.replyAuthor": "作者回复",
+        "faq.replyLv": "Lv5",
+        "faq.reply": "回复",
+        "faq.report": "举报",
+        "faq.likeAria": "点赞这条回答",
+        "faq.unsupported": "暂不支持",
         "faq.q1": "清除浏览器数据会怎样？",
-        "faq.a1": "观看记录保存在浏览器本地存储。一旦清除浏览器站点数据、卸载扩展，记录会被直接删除且无法找回。建议定期使用面板导出JSON文件做好备份。",
+        "faq.a1": "脚本产生的观看记录全部保存在当前浏览器的本地存储空间中，不会存在云端。当你清除网站站点数据、清除浏览器缓存、重置浏览器或者直接卸载 Tampermonkey 扩展时，本地存储的全部观看统计数据会被浏览器直接清除，删除之后无法恢复。强烈建议养成定期备份习惯，在脚本面板使用导出功能，把记录导出为 JSON 文件，保存在本地磁盘，防止数据意外丢失。",
         "faq.q2": "换浏览器或换电脑怎么迁移？",
-        "faq.a2": "在新环境装好脚本后，在面板使用「导入」功能，选中之前导出的JSON文件，记录会按日期合并。多台设备数据不会自动同步，需要手动导入迁移。",
+        "faq.a2": "脚本本身没有云端自动同步功能，多设备之间数据不会自动互通。更换浏览器、换新电脑时，先在新环境安装好 Tampermonkey 并部署脚本，打开脚本管理面板，找到导入功能，选择你之前导出保存好的 JSON 备份文件。导入后，新旧记录会按照视频观看时间自动合并，重复条目会自动去重。每次更换设备前记得先导出备份文件，手动完成跨设备迁移。",
         "faq.q3": "脚本会上传我的观看数据吗？",
-        "faq.a3": "不会。脚本只会在浏览器本地读写存储。唯一的外部请求是访问B站公开接口获取视频标题，不会上传你的观看时长、播放进度等任何观看记录。",
+        "faq.a3": "不会上传你的任何个人观看记录。脚本所有观看时长、播放历史、进度统计都只在浏览器本地读写存储。脚本仅有的外部网络请求，只是调用 B 站公开开放接口获取视频标题、封面这类公开视频元信息，不会收集、上报、上传你的播放进度、观看时长、浏览历史等任何属于你的个人观看数据，所有统计信息只保存在你本机浏览器。",
         "privacy.server": "不会连接外部服务器上传数据",
         "privacy.replay": "重播数据流",
         "privacy.n1.code": "Source 01",
@@ -4281,12 +4526,21 @@
         "privacy.routeAria": "Local data handling path",
         "privacy.platformNote": "Runs only on desktop Chrome or Edge with Tampermonkey installed. Mobile browsers cannot run the script.",
         "faq.title": "Frequently asked",
+        "faq.floor1": "Floor 1 · anonymous reader · sample",
+        "faq.floor2": "Floor 2 · anonymous reader · sample",
+        "faq.floor3": "Floor 3 · anonymous reader · sample",
+        "faq.replyAuthor": "Author reply",
+        "faq.replyLv": "Lv5",
+        "faq.reply": "Reply",
+        "faq.report": "Report",
+        "faq.likeAria": "Like this answer",
+        "faq.unsupported": "Not available",
         "faq.q1": "What happens if I clear my browser data?",
-        "faq.a1": "Watch records live in browser local storage. Clearing browser or site data, or uninstalling the extension, deletes them outright with no way to recover. Export the JSON file from the panel on a regular basis to keep a backup.",
+        "faq.a1": "Everything the script records lives in this browser's local storage and never in the cloud. Clearing site data or the browser cache, resetting the browser, or uninstalling the Tampermonkey extension deletes all stored watch statistics outright, and there is no way to get them back. Keep a regular backup habit: use Export in the script panel to write the records to a JSON file on your own disk so an accident cannot cost you the data.",
         "faq.q2": "How do I move to another browser or computer?",
-        "faq.a2": "Install the script in the new environment, then use Import in the panel and pick the JSON file you exported earlier. Records merge in by date. The two machines never sync on their own, so the import has to be manual.",
+        "faq.a2": "The script has no cloud sync, so devices never share data on their own. When you switch browsers or move to a new computer, install Tampermonkey and deploy the script in the new environment first, open the script's management panel, find Import, and select the JSON backup you exported earlier. Records then merge by watch time and duplicate entries are removed automatically. Export a backup before every device change so the migration stays manual and under your control.",
         "faq.q3": "Does the script upload my watch data?",
-        "faq.a3": "No. The script only reads and writes storage inside your browser. Its one outbound request asks a public Bilibili endpoint for a video title, and it never uploads your watch duration, playback progress, or any other viewing record.",
+        "faq.a3": "None of your personal viewing records are ever uploaded. Watch duration, playback history, and progress statistics are read and written only in your browser's local storage. The script's only outbound request calls a public Bilibili endpoint for public video metadata such as title and cover image. It never collects, reports, or uploads your playback progress, watch duration, browsing history, or any other personal viewing data. All statistics stay in your own browser.",
         "privacy.server": "Never connects to an external server",
         "privacy.replay": "Replay data flow",
         "privacy.n1.code": "Source 01",
@@ -5017,29 +5271,34 @@
       }
     }
 
-    // 常见问题：互斥手风琴，同一时间只展开一条。
-    // 默认全部收起，点开新的会自动收起旧的。
-    const faqItems = [...document.querySelectorAll(".faq-item")];
-    if (faqItems.length) {
-      const setFaqOpen = (item, open) => {
-        const question = item.querySelector(".faq-question");
-        item.dataset.open = open ? "true" : "false";
-        if (question) question.setAttribute("aria-expanded", String(open));
-      };
-
-      faqItems.forEach((item) => {
-        const question = item.querySelector(".faq-question");
-        if (!question) return;
-        setFaqOpen(item, false);
-
-        question.addEventListener("click", () => {
-          const willOpen = item.dataset.open !== "true";
-          // 先全部收起，再展开目标 —— 互斥的唯一状态源就是 data-open
-          faqItems.forEach((other) => setFaqOpen(other, false));
-          setFaqOpen(item, willOpen);
-        });
+    // 楼层操作行：点赞是真的可切换控件。
+    // 计数只在这个页面内存里加减，不写 localStorage、不发请求
+    // —— 页面上的三个数字都是示例值，持久化会把「示例」变成假的真实数据。
+    // 状态唯一源是 aria-pressed，视觉全部由 CSS 的 [aria-pressed="true"] 派生。
+    document.querySelectorAll(".faq-like").forEach((btn) => {
+      const count = btn.querySelector(".faq-like-count");
+      const base = count ? Number(count.textContent.trim()) || 0 : 0;
+      btn.addEventListener("click", () => {
+        const liked = btn.getAttribute("aria-pressed") === "true";
+        btn.setAttribute("aria-pressed", liked ? "false" : "true");
+        if (count) count.textContent = String(liked ? base : base + 1);
       });
-    }
+    });
+
+    // 回复与举报是演示用控件：本项目没有后端，也没有可提交的评论系统，
+    // 所以不假装能提交 —— 点击只把按钮切到禁用态并改文案为「暂不支持」，
+    // 让「这是示例界面」这件事在交互里也成立。
+    document.querySelectorAll(".faq-action:not(.faq-like)").forEach((btn) => {
+      const original = btn.textContent.trim();
+      btn.addEventListener("click", () => {
+        btn.disabled = true;
+        btn.textContent = t("faq.unsupported");
+        window.setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = original;
+        }, 1600);
+      });
+    });
 
     // 第六屏票根：进入视口后从右侧滑入
     const destinationPlates = document.querySelectorAll(".destination-plate");
