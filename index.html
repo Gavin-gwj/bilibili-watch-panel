@@ -3232,6 +3232,13 @@
         height: auto;
       }
 
+      /* 单列布局下卡片几乎铺满整行，零点竖线的标签横向躲不开卡片，
+         一定会压在规则文字上。底纹本来就只负责氛围，窄屏直接隐去
+         这一个标签；竖虚线本身留着，它在卡片左侧，不与文字相交。 */
+      .records-illustration .lg-callout {
+        display: none;
+      }
+
       .support-strip {
         grid-template-columns: repeat(2, 1fr);
       }
