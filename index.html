@@ -1656,23 +1656,44 @@
       left: 50%;
       z-index: 0;
       display: block;
-      /* 横向贯穿：视口宽度的 1.6 倍。用 vw 而不是 %，
-         因为 % 只能算到栏宽（减去 gutter 后更窄），谈不上「超出可视区」。 */
-      width: 160vw;
+      /* 横向贯穿：视口宽度的 1.42 倍。仍是「铺满并超出可视区」，
+         但比上一版的 1.6 倍收了一圈 —— 用户反馈线条整体再小一点。 */
+      width: 142vw;
       max-width: none;
-      /* 纵向收窄：图形压到约六成高度，且**永不超过等比时的自然高度**。
-         只给 62% 会在中等宽度（约 900–1050px）失效：那时区块仍是双列、
-         高度不大，62% 反而比自然高度还高，图形就被纵向拉长了。
-         加上 min() 兜底后，超过自然高度就退回等比，绝不会被拉长。
+      /* 纵向收窄：压到约五成半高，且**永不超过等比时的自然高度**。
+         只给百分比会在中等宽度（约 900–1050px）失效：那时区块仍是双列、
+         高度不大，反而比自然高度还高，图形被纵向拉长。
+         加 min() 兜底后，超过自然高度就退回等比，绝不会被拉长。
          非等比缩放靠 preserveAspectRatio="none"，好处是不必逐一改坐标；
          代价是圆点会变椭圆，由 --illu-squash 反馈量补回正圆。 */
-      height: min(62%, 160vw * 0.4285714);
+      height: min(56%, 142vw * 0.4285714);
       margin: 0;
       /* 以自身中心对齐区块中心，让图形在纵向也居中贯穿 */
       transform: translate(-50%, -50%);
       /* 压暗到背景层：淡底纹，不再与前景文字争焦点。 */
-      opacity: 0.26;
+      opacity: 0.24;
       pointer-events: none;
+      /* 左右两端渐隐：从中间向两边逐渐变淡消失，避免生硬截断。
+         用 mask 而不是盖一层渐变矩形 —— mask 只影响可见度，
+         不会在元素上多出一个会挡住点击或影响层级的兄弟节点。 */
+      -webkit-mask-image: linear-gradient(
+        to right,
+        transparent 0%,
+        rgb(0 0 0 / 0.28) 14%,
+        rgb(0 0 0 / 1) 34%,
+        rgb(0 0 0 / 1) 66%,
+        rgb(0 0 0 / 0.28) 86%,
+        transparent 100%
+      );
+      mask-image: linear-gradient(
+        to right,
+        transparent 0%,
+        rgb(0 0 0 / 0.28) 14%,
+        rgb(0 0 0 / 1) 34%,
+        rgb(0 0 0 / 1) 66%,
+        rgb(0 0 0 / 0.28) 86%,
+        transparent 100%
+      );
     }
 
     /* 底纹里的文字统一压小、压淡：它们是示意标注，不是要读的内容。
@@ -1778,17 +1799,122 @@
 
     /* ---- 记录规则卡片：只有三条规则 ----
        时序图解已从这里取出、成为区块底层的背景插图。
-       卡片因此变成单栏文字卡片，宽度上限是「在标题右侧空档里
-       留少量边距」的表达，不是为了跟其他区块硬凑等宽。 */
+       卡片铺满自己的那一栏，右缘因此与顶部概览的右缘对齐；
+       文字行宽由内部的 .ledger-text 自己限，不靠卡片限宽。 */
     .ledger {
       display: block;
       width: 100%;
-      max-width: 620px;
       margin: 0;
       border: 1px solid var(--surface-line);
       border-radius: 14px;
       background: var(--surface);
       box-shadow: var(--elev-1);
+      /* 光效与 hover 提亮的过渡：只动边框色、底色与阴影，
+         不动尺寸，避免布局抖动。 */
+      transition: border-color 260ms var(--ease-page),
+                  background-color 260ms var(--ease-page),
+                  box-shadow 260ms var(--ease-page),
+                  transform 260ms var(--ease-page);
+    }
+
+    /* 鼠标悬停：极轻微提亮 + 极弱外发光，位移不超过 2px。
+       用 translateY 而不是改 padding/margin，尺寸完全不变。 */
+    .ledger:hover {
+      border-color: var(--signal);
+      background: var(--card-hover);
+      transform: translateY(-2px);
+      box-shadow: var(--elev-2), 0 0 0 1px rgb(255 92 138 / 0.14),
+                  0 6px 24px rgb(255 92 138 / 0.07);
+    }
+
+    /* 键盘可达性：焦点态与 hover 同等对待 */
+    .ledger:focus-within {
+      border-color: var(--signal);
+      box-shadow: var(--elev-2), 0 0 0 1px rgb(255 92 138 / 0.14);
+    }
+
+    /* ---- 记录区入场编排 ----
+       节奏：卡片先上浮淡入（600ms），三条规则随后依次出现（间隔 150ms），
+       底层的节点同时从左到右依次点亮。全部只动 opacity 与 transform，
+       不触发重排；起点都写在 .js-motion 前缀下，无 JS 时直接呈现终态。 */
+
+    /* 1) 卡片：上浮淡入 */
+    .js-motion .ledger {
+      opacity: 0;
+      transform: translate3d(0, 18px, 0);
+    }
+
+    .js-motion .ledger.is-visible {
+      opacity: 1;
+      transform: none;
+      transition: opacity 600ms var(--ease-out),
+                  transform 600ms var(--ease-out),
+                  border-color 260ms var(--ease-page),
+                  background-color 260ms var(--ease-page),
+                  box-shadow 260ms var(--ease-page);
+    }
+
+    /* 2) 三条规则：依次出现，每条晚 150ms */
+    .js-motion .ledger .ledger-note {
+      opacity: 0;
+      transform: translate3d(0, 10px, 0);
+    }
+
+    .js-motion .ledger.is-visible .ledger-note {
+      opacity: 1;
+      transform: none;
+      transition: opacity 460ms var(--ease-out) var(--note-delay, 0ms),
+                  transform 460ms var(--ease-out) var(--note-delay, 0ms);
+    }
+
+    .ledger-note:nth-child(1) { --note-delay: 180ms; }
+    .ledger-note:nth-child(2) { --note-delay: 330ms; }
+    .ledger-note:nth-child(3) { --note-delay: 480ms; }
+
+    /* 3) 底层节点：从左到右依次点亮。
+       用 opacity + 一圈很淡的粉色光晕，不改半径（半径变了会连带
+       改 fill，和 --illu-squash 的 transform 叠在一起不好控）。 */
+    .js-motion .records-illustration .lg-node {
+      opacity: 0.18;
+    }
+
+    .js-motion .records-illustration.is-visible .lg-node {
+      opacity: 1;
+      transition: opacity 700ms var(--ease-out) var(--node-delay, 0ms),
+                  filter 700ms var(--ease-out) var(--node-delay, 0ms);
+    }
+
+    /* 光晕只在点亮的那一刻出现，随后收回，读作「闪了一下」 */
+    @keyframes node-glint {
+      0%   { filter: drop-shadow(0 0 0 rgb(255 92 138 / 0)); }
+      45%  { filter: drop-shadow(0 0 6px rgb(255 92 138 / 0.5)); }
+      100% { filter: drop-shadow(0 0 0 rgb(255 92 138 / 0)); }
+    }
+
+    .js-motion .records-illustration.is-visible .lg-node {
+      animation: node-glint 900ms var(--ease-out) var(--node-delay, 0ms) both;
+    }
+
+    .lg-node:nth-of-type(1) { --node-delay: 120ms; }
+    .lg-node:nth-of-type(2) { --node-delay: 220ms; }
+    .lg-node:nth-of-type(3) { --node-delay: 320ms; }
+    .lg-node:nth-of-type(4) { --node-delay: 420ms; }
+    .lg-node:nth-of-type(5) { --node-delay: 520ms; }
+    .lg-node:nth-of-type(6) { --node-delay: 620ms; }
+    .lg-node:nth-of-type(7) { --node-delay: 720ms; }
+
+    /* 4) 底纹的一次性归位：进场时它比终态略微偏右，随后用 12s 极慢地
+       滑回原位。位移不到图形宽的 1.4% —— 读起来是「底纹轻轻落定」，
+       不是「有东西在循环滚动」。刻意用 forwards 而不是 infinite：
+       持续横向流动会一直索取注意力，也会让任何一刻都有一半图在动，
+       对一块本来就该待在背景里的示意底纹来说收益为负。 */
+    @keyframes illus-settle {
+      from { transform: translate(-50%, -50%) translate3d(-1.4%, 0, 0); }
+      to   { transform: translate(-50%, -50%) translate3d(0, 0, 0); }
+    }
+
+    .js-motion .records-illustration.is-visible {
+      animation: illus-settle 12s ease-out forwards;
     }
 
     /* 三条规则：横向留给文字，纵向紧凑 */
@@ -2950,7 +3076,10 @@
     }
 
 
-    .reveal {
+    /* 入场起点统一挂在 .js-motion 下：没有 JS 时（脚本被拦、CSP 禁止、
+       老浏览器）页面必须直接呈现终态，而不是留一片空白。
+       内联脚本会在首帧前加上 .js-motion，所以脚本可用时不会有可见闪动。 */
+    .js-motion .reveal {
       opacity: 0;
       clip-path: inset(0 0 18% 0);
       transform: translateY(26px);
@@ -3521,6 +3650,28 @@
         transition: none !important;
       }
 
+      /* 记录区的入场编排在 reduce 下全部直接呈现终态：
+         卡片与三条规则归位，节点全亮，底纹不再流动。
+         注意节点要显式给出 opacity 1 —— 它在 .js-motion 下默认是 0.18，
+         只靠「去掉 transition」不够。 */
+      .ledger,
+      .ledger .ledger-note {
+        opacity: 1 !important;
+        transform: none !important;
+        animation: none !important;
+      }
+
+      .records-illustration .lg-node {
+        opacity: 1 !important;
+        animation: none !important;
+        filter: none !important;
+      }
+
+      .records-illustration {
+        animation: none !important;
+        transform: translate(-50%, -50%) !important;
+      }
+
       .reveal {
         opacity: 1;
         clip-path: none;
@@ -3745,12 +3896,12 @@
           <path class="lg-idle" d="M404 118 H462" />
 
           <!-- 本地零点边界：竖虚线，标出跨天拆分的那一刀。
-               横向落在 120 处（卡片最左只占到图形的 22%~45%，这里在
-               卡片左侧的空白里，各档都不割断卡片文字）。
-               纵向仍收在 viewBox 的 0~240 内：上端 52、下端 176，
-               标签压在 44，都在图内，不会被裁。 -->
-          <line class="lg-midnight" x1="120" y1="52" x2="120" y2="176" />
-          <text class="lg-callout" x="120" y="44" text-anchor="middle">午夜 00:00</text>
+               它是全图唯一的纵贯竖线，一旦落在卡片上就会割断文字。
+               卡片左缘占到图形的 18.3%（窄屏）到 44.3%（宽屏），
+               所以把线放在 100 处（图形 17.9%），各档都在卡片左侧；
+               插图 142vw + 左右渐隐后，这里仍在可见范围内。 -->
+          <line class="lg-midnight" x1="100" y1="52" x2="100" y2="176" />
+          <text class="lg-callout" x="100" y="44" text-anchor="middle">午夜 00:00</text>
 
           <!-- 节点 -->
           <circle class="lg-node is-real" cx="56" cy="118" r="4.5" />
@@ -4874,12 +5025,14 @@
       ruleItems.forEach((item) => ruleObserver.observe(item));
     }
 
-    // 入场：指标卡片、风险提示、FAQ 卡片各自一次。
-    // 三类元素错峰出现，但共用同一套「进视口播放一次就解除观察」的机制。
+    // 入场：指标卡片、风险提示、FAQ 卡片、记录区卡片与底纹各自一次。
+    // 各类元素错峰出现，但共用同一套「进视口播放一次就解除观察」的机制。
     const entranceGroups = [
       document.querySelectorAll(".privacy-facts"),
       document.querySelectorAll(".platform-note"),
       document.querySelectorAll(".faq"),
+      document.querySelectorAll(".ledger"),
+      document.querySelectorAll(".records-illustration"),
     ].filter((group) => group.length);
 
     if (entranceGroups.length) {
