@@ -18,6 +18,16 @@
       /* 图表/边框用的路线绿偏亮，直接当正文色在浅底上只有 2.3:1，
          故另给一个可作文字用的深绿 */
       --route-text: #8aa878;
+      /* 数据流光点的外圈辉光：用路线绿的低透明版本，
+         让光点像「沿线滑过的一小段电流」，而不是一颗发光灯泡 */
+      --route-halo: rgba(138, 168, 120, 0.22);
+      /* 卡片 hover 时的极轻提亮，比 --fill-1（0.022）略强一点点 */
+      --route-hover: rgba(255, 255, 255, 0.03);
+      /* 比 --enamel 更亮一档，专用于「悬停时应被点亮的文字」 */
+      --enamel-bright: #fbf8f1;
+      /* 断路末端小叉的颜色：读起来要像「关闭」，不能像警告，
+         所以用中性灰而不是信号粉 */
+      --status-off: #6d7274;
 
       /* 面板/纸面底色：两个主题共用（截图与周报的浅色底） */
       --paper: #f3efe5;
@@ -176,6 +186,11 @@
       /* 5.71:1 on --ink —— 小字号（.footer-status 10.9px）在浅色下也稳过 4.5 */
       --meta-dim: #5c5f67;
       --route-text: #4f6b3f;
+      /* 浅底上光点辉光改用深绿，否则绿色光晕在白纸上看不见 */
+      --route-halo: rgba(79, 107, 63, 0.2);
+      --route-hover: rgba(20, 22, 26, 0.03);
+      --enamel-bright: #08090a;
+      --status-off: #9a9d9f;
 
       /* 面板表面：纯白卡片浮在冷灰底上，投影更柔更长 */
       --surface: #ffffff;
@@ -1925,6 +1940,37 @@
       line-height: 1.95;
     }
 
+    /* 入场：标题逐字淡入，正文延迟 0.4s 后整体淡入。
+       逐字由脚本按字符切分成 span，避免为动画改动文案或双语词条。
+       无脚本 / reduce 下由 .js-motion 缺失与下方 reduce 规则直接呈现终态。 */
+    .js-motion .privacy-headline .char {
+      display: inline-block;
+      opacity: 0;
+      transform: translate3d(0, 0.3em, 0);
+      animation: char-rise 300ms var(--ease-out) both;
+      animation-delay: var(--char-delay, 0ms);
+    }
+
+    @keyframes char-rise {
+      from { opacity: 0; transform: translate3d(0, 0.3em, 0); }
+      to { opacity: 1; transform: none; }
+    }
+
+    .js-motion .privacy-copy p {
+      opacity: 0;
+      animation: privacy-copy-in 620ms var(--ease-out) 400ms both;
+    }
+
+    @keyframes privacy-copy-in {
+      from { opacity: 0; transform: translate3d(0, 10px, 0); }
+      to { opacity: 1; transform: none; }
+    }
+
+    .privacy-copy p strong {
+      color: var(--enamel);
+      font-weight: 650;
+    }
+
     .privacy-route {
       position: relative;
       min-height: 430px;
@@ -1998,19 +2044,17 @@
     .route-node {
       display: grid;
       min-height: 138px;
-      padding: 22px 18px;
       border: 1px solid var(--surface-line);
       border-radius: 10px;
       background: var(--surface);
       box-shadow: var(--elev-1);
-      align-content: center;
-      text-align: center;
-      /* 评审：盒子依次淡入；hover 时边框高亮，与连线一起亮起来。
-         默认可见，仅在有 JS 时压回起点等待入场。 */
+      /* 卡片本体不再直接响应 hover，改由内部的 .route-node-face 承担，
+         这样折叠面板展开后仍占满整张卡片宽度。 */
       opacity: 1;
       transition: opacity 620ms var(--ease-out) var(--node-delay, 0ms),
         transform 620ms var(--ease-out) var(--node-delay, 0ms),
-        border-color 300ms var(--ease-out), box-shadow 300ms var(--ease-out);
+        border-color 300ms var(--ease-out), box-shadow 300ms var(--ease-out),
+        background-color 300ms var(--ease-out);
     }
 
     .js-motion .route-node {
@@ -2027,14 +2071,33 @@
     .route-node:nth-child(2) { --node-delay: 620ms; }
     .route-node:nth-child(3) { --node-delay: 860ms; }
 
-    .route-node:hover {
-      border-color: var(--route);
-      box-shadow: var(--elev-2);
+    /* 卡片正面是可以聚焦的按钮，点击展开技术详情。
+       去掉浏览器默认按钮样式，但保留键盘焦点环。 */
+    .route-node-face {
+      display: grid;
+      width: 100%;
+      padding: 22px 18px;
+      border: 0;
+      border-radius: 10px;
+      background: none;
+      align-content: center;
+      text-align: center;
+      cursor: pointer;
+      transition: background-color 300ms var(--ease-out);
     }
 
-    /* hover 任意盒子时整条连线提亮，强调「数据只走这一条线」 */
-    .privacy-route:has(.route-node:hover) .route-line {
-      background: var(--route-text);
+    .route-node-face:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: -3px;
+    }
+
+    /* 悬停：深灰边框 → 淡绿描边，背景极轻提亮，标题变亮。
+       三处变化幅度都刻意压得很小，保持克制。 */
+    .route-node:hover,
+    .route-node:has(.route-node-face:focus-visible) {
+      border-color: var(--route);
+      background: var(--route-hover);
+      box-shadow: var(--elev-2);
     }
 
     .route-node-code {
@@ -2043,60 +2106,173 @@
       font-size: 0.7rem;
       letter-spacing: 0.13em;
       text-transform: uppercase;
+      /* 装饰小字，权重低于中文标题 */
+      opacity: 0.82;
     }
 
     .route-node strong {
       margin-top: 10px;
       font-size: 1rem;
+      transition: color 300ms var(--ease-out);
     }
 
-    .route-node span {
+    .route-node:hover strong {
+      color: var(--enamel-bright);
+    }
+
+    .route-node-copy {
       margin-top: 5px;
       color: var(--muted);
       font-size: 0.72rem;
+      line-height: 1.7;
     }
 
+    /* 折叠的技术详情：默认 hidden，展开时平滑落下。
+       技术名词只出现在这一层，主卡片保持用户语言。 */
+    .route-detail {
+      padding: 0 18px 18px;
+      text-align: center;
+    }
+
+    .route-detail p {
+      margin: 0;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+      color: var(--meta-dim);
+      font-size: 0.7rem;
+      line-height: 1.7;
+    }
+
+    /* 展开时用 grid-template-rows 过渡做高度动画（不依赖固定高度） */
+    .route-node[data-open="true"] .route-detail {
+      animation: route-detail-in 320ms var(--ease-out) both;
+    }
+
+    @keyframes route-detail-in {
+      from { opacity: 0; transform: translate3d(0, -4px, 0); }
+      to { opacity: 1; transform: none; }
+    }
+
+    /* 右上角：结论短句 + 重播按钮 */
+    .route-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 26px;
+    }
+
+    .route-label {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.76rem;
+      letter-spacing: 0.02em;
+    }
+
+    .route-replay {
+      flex: none;
+      min-height: 32px;
+      padding: 0 12px;
+      border: 1px solid var(--surface-line);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--muted);
+      font-family: var(--ui);
+      font-size: 0.72rem;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: background-color 260ms var(--ease-out),
+        border-color 260ms var(--ease-out), color 260ms var(--ease-out);
+    }
+
+    .route-replay:hover {
+      border-color: var(--route);
+      background: var(--route-hover);
+      color: var(--enamel-bright);
+    }
+
+    .route-replay:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
+
+    /* 数据流光点：沿连线走，到第 3 张卡片就消失，不再往外延伸。
+       只有页面入场、卡片 hover、点重播时才播 —— 绝不无限循环。
+       起点与终点都由脚本量出的 --flow-start-x/y 与 --flow-end-x/y 控制，
+       CSS 只负责「长什么样」，不负责「走多远」。
+       光点由 transform 的 -50% 居中，所以桌面/单列的差异只剩目标点坐标。 */
+    .flow-dot {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 3;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--route);
+      box-shadow: 0 0 0 3px var(--route-halo), 0 0 10px 1px var(--route-halo);
+      opacity: 0;
+      pointer-events: none;
+      /* 静止时停在起点，避免落在容器左上角 */
+      translate: var(--flow-start-x, 0px) var(--flow-start-y, 0px);
+    }
+
+    .flow-dot.is-flowing {
+      animation: flow-dot 1.5s var(--ease-inout) forwards;
+    }
+
+    @keyframes flow-dot {
+      0% {
+        translate: var(--flow-start-x, 0px) var(--flow-start-y, 0px);
+        opacity: 0;
+      }
+      12% { opacity: 1; }
+      82% { opacity: 1; }
+      100% {
+        translate: var(--flow-end-x, 0px) var(--flow-end-y, 0px);
+        opacity: 0;
+      }
+    }
+
+    /* 断路：从第 3 张卡片右侧出发的一条灰色虚线，走一小段就停，
+       末端一个小叉。含义是「没有通往外部服务器的通路」。
+       它必须看起来是「断掉的」，所以用 dashed 而不是实线。
+       容器右内边距只有 39px，所以宽度必须压在 30px 以内，否则会顶穿圆角。 */
     .server-spur {
       position: absolute;
-      top: calc(50% - 128px);
-      left: 50%;
-      width: 1px;
-      height: 92px;
-      background: var(--line-strong);
-    }
-
-    .server-spur::before,
-    .server-spur::after {
-      position: absolute;
-      bottom: -7px;
-      left: 50%;
-      width: 16px;
+      top: 50%;
+      right: 10px;
+      width: 28px;
       height: 1px;
-      content: "";
-      background: var(--signal);
-      transform-origin: center;
+      background-image: linear-gradient(90deg, var(--line-strong) 0 5px, transparent 5px 11px);
+      background-size: 11px 1px;
+      background-repeat: repeat-x;
+      transform: translateY(-50%);
     }
 
+    /* 虚线中途断开：在 62% 处盖一块底色，让「没有通路」这件事看得见 */
     .server-spur::before {
-      transform: translateX(-50%) rotate(45deg);
-    }
-
-    .server-spur::after {
-      transform: translateX(-50%) rotate(-45deg);
-    }
-
-    .server-label {
       position: absolute;
-      top: calc(50% - 164px);
-      left: 50%;
-      width: 170px;
-      color: var(--muted);
-      font-family: var(--measure);
-      font-size: 0.7rem;
-      letter-spacing: 0.12em;
-      text-align: center;
-      text-transform: uppercase;
-      transform: translateX(-50%);
+      top: -1px;
+      left: 58%;
+      width: 14px;
+      height: 3px;
+      content: "";
+      background: var(--surface);
+    }
+
+    /* 末端小叉 */
+    .server-spur::after {
+      position: absolute;
+      top: 50%;
+      right: -3px;
+      width: 11px;
+      height: 11px;
+      content: "";
+      background:
+        linear-gradient(45deg, transparent 45%, var(--status-off) 45% 55%, transparent 55%),
+        linear-gradient(-45deg, transparent 45%, var(--status-off) 45% 55%, transparent 55%);
+      transform: translateY(-50%);
     }
 
     .privacy-facts {
@@ -2914,9 +3090,12 @@
       }
 
       .privacy-route {
-        min-height: 720px;
+        min-height: 0;
+        padding: 28px 22px;
       }
 
+      /* 单列时连线改竖：从第一张卡片上方贯到最后一张卡片下方。
+         光点也随之改为纵向流动，仍停在最后一张卡片上，不向下延伸。 */
       .route-line {
         top: 14%;
         bottom: 14%;
@@ -2933,12 +3112,25 @@
         transform: rotate(135deg);
       }
 
+      /* 竖排时断路改画在最后一张卡片下方，方向朝下 */
       .server-spur {
-        display: none;
+        top: auto;
+        right: auto;
+        bottom: 14px;
+        left: 50%;
+        width: 1px;
+        height: 42px;
       }
 
-      .server-label {
-        top: 24px;
+      .route-head {
+        align-items: flex-start;
+        margin-bottom: 20px;
+      }
+
+      /* 单列时连线改竖，光点坐标由脚本按真实几何给出，
+         所以这里不需要再覆写 keyframes，只把静止位置对齐到中线。 */
+      .flow-dot {
+        margin-left: -3.5px;
       }
 
       .destination-plate {
@@ -3178,6 +3370,17 @@
       .js-motion .destination-plate.is-settled .destination-side {
         opacity: 1;
         transform: none;
+      }
+
+      /* reduce 下不放光点：它是一条纯粹的位移动画，没有承载信息。
+         连线本身仍然画出来，所以「数据只走到第 3 张卡片」照样看得出来。 */
+      .flow-dot {
+        display: none !important;
+      }
+
+      /* 技术详情在 reduce 下不做落下的微动效 */
+      .route-node[data-open="true"] .route-detail {
+        animation: none !important;
       }
     }
   </style>
@@ -3427,30 +3630,57 @@
     <section class="section shell" id="privacy">
       <div class="privacy-layout">
         <div class="privacy-copy reveal">
-          <h2 data-i18n="privacy.title">你的数据只走这一条线。</h2>
-          <p data-i18n="privacy.copy">从 B 站播放事件到本地存储，再到你主动选择的导出文件，整条路径都在浏览器里完成。项目没有账号系统，没有服务端，也不会上传观看数据。</p>
+          <h2 class="privacy-headline" data-i18n="privacy.title">你的观看记录，只存在你的电脑</h2>
+          <p data-i18n="privacy.copy">全程在浏览器本地运行，<strong>不上传任何观看数据到外网</strong>。无服务器、无账号，数据控制权完全在你手里。</p>
         </div>
 
         <div class="reveal">
           <div class="privacy-route" aria-label="本地数据处理路径" data-i18n-aria-label="privacy.routeAria">
+            <!-- 右上角：本区结论的短句 + 极简重播按钮（评审新需求） -->
+            <div class="route-head">
+              <p class="route-label" data-i18n="privacy.server">不会连接外部服务器上传数据</p>
+              <button class="route-replay" type="button" id="routeReplay" data-i18n="privacy.replay">重播数据流</button>
+            </div>
+
             <div class="route-line" aria-hidden="true"></div>
-            <div class="server-label">Server path not connected</div>
+            <div class="flow-dot" aria-hidden="true"></div>
+
+            <!-- 卡片 3 右侧的断路：灰色虚线走一段就停，末端一个小叉。
+                 含义是「这里没有通往外部服务器的路」，不是装饰性状态点。 -->
             <div class="server-spur" aria-hidden="true"></div>
+
             <div class="route-nodes">
+              <!-- 卡片可点击展开技术详情；aria-expanded / aria-controls 由脚本维护。
+                   面板内容默认收起，技术名词只出现在这里，不放在主卡片上。 -->
               <div class="route-node">
-                <span class="route-node-code">Source 01</span>
-                <strong data-i18n="privacy.n1.title">B 站播放事件</strong>
-                <span data-i18n="privacy.n1.copy">公开页面与播放器状态</span>
+                <button class="route-node-face" type="button" aria-expanded="false" aria-controls="routeDetail1">
+                  <span class="route-node-code">Source 01</span>
+                  <strong data-i18n="privacy.n1.title">读取 B 站播放状态</strong>
+                  <span class="route-node-copy" data-i18n="privacy.n1.copy">仅获取页面公开播放信息，不触碰账号隐私</span>
+                </button>
+                <div class="route-detail" id="routeDetail1" hidden>
+                  <p data-i18n="privacy.n1.detail">读取 B 站页面播放事件，获取播放器公开状态</p>
+                </div>
               </div>
               <div class="route-node">
-                <span class="route-node-code">Local 02</span>
-                <strong data-i18n="privacy.n2.title">Shadow DOM 面板</strong>
-                <span data-i18n="privacy.n2.copy">采集与统计都在本机执行</span>
+                <button class="route-node-face" type="button" aria-expanded="false" aria-controls="routeDetail2">
+                  <span class="route-node-code">Local 02</span>
+                  <strong data-i18n="privacy.n2.title">本地计算分析</strong>
+                  <span class="route-node-copy" data-i18n="privacy.n2.copy">所有统计在本机完成，不向外发送数据</span>
+                </button>
+                <div class="route-detail" id="routeDetail2" hidden>
+                  <p data-i18n="privacy.n2.detail">基于 Shadow DOM 面板采集，全部统计逻辑在浏览器本机执行</p>
+                </div>
               </div>
               <div class="route-node">
-                <span class="route-node-code">Export 03</span>
-                <strong data-i18n="privacy.n3.title">浏览器本地存储</strong>
-                <span data-i18n="privacy.n3.copy">只有你能导出或清空</span>
+                <button class="route-node-face" type="button" aria-expanded="false" aria-controls="routeDetail3">
+                  <span class="route-node-code">Export 03</span>
+                  <strong data-i18n="privacy.n3.title">浏览器本地保存</strong>
+                  <span class="route-node-copy" data-i18n="privacy.n3.copy">记录只存本地，随时导出 / 一键清空</span>
+                </button>
+                <div class="route-detail" id="routeDetail3" hidden>
+                  <p data-i18n="privacy.n3.detail">数据存储于浏览器本地存储，仅用户本人可导出或清空</p>
+                </div>
               </div>
             </div>
           </div>
@@ -3696,8 +3926,8 @@
         "support.s3.copy": "换浏览器时由你主动导出和导入，合并记录并去重会话。",
         "support.s4.title": "周报 PNG",
         "support.s4.copy": "把本周总览、最爱 UP 主和每日时长整理成一张可保存的报告。",
-        "privacy.title": "你的数据只走这一条线。",
-        "privacy.copy": "从 B 站播放事件到本地存储，再到你主动选择的导出文件，整条路径都在浏览器里完成。项目没有账号系统，没有服务端，也不会上传观看数据。",
+        "privacy.title": "你的观看记录，只存在你的电脑",
+        "privacy.copy": "全程在浏览器本地运行，<strong>不上传任何观看数据到外网</strong>。无服务器、无账号，数据控制权完全在你手里。",
         "privacy.routeAria": "本地数据处理路径",
         "privacy.platformNote": "仅支持 PC 端 Chrome / Edge 等可安装 Tampermonkey 的浏览器，移动端浏览器无法运行。",
         "faq.title": "常见问题",
@@ -3707,16 +3937,20 @@
         "faq.a2": "在新环境装好脚本后，用面板里的「导入」选择之前导出的 JSON 文件，记录会按日期合并进去。两台机器的数据不会自动同步，需要手动导入一次。",
         "faq.q3": "脚本会上传我的观看数据吗？",
         "faq.a3": "不会。脚本只在浏览器里读写本地存储，唯一的外部请求是向 B 站公开接口查询视频标题，不包含任何观看时长或进度信息。",
-        "privacy.server": "Server path not connected",
+        "privacy.server": "不会连接外部服务器上传数据",
+        "privacy.replay": "重播数据流",
         "privacy.n1.code": "Source 01",
-        "privacy.n1.title": "B 站播放事件",
-        "privacy.n1.copy": "公开页面与播放器状态",
+        "privacy.n1.title": "读取 B 站播放状态",
+        "privacy.n1.copy": "仅获取页面公开播放信息，不触碰账号隐私",
+        "privacy.n1.detail": "读取 B 站页面播放事件，获取播放器公开状态",
         "privacy.n2.code": "Local 02",
-        "privacy.n2.title": "Shadow DOM 面板",
-        "privacy.n2.copy": "采集与统计都在本机执行",
+        "privacy.n2.title": "本地计算分析",
+        "privacy.n2.copy": "所有统计在本机完成，不向外发送数据",
+        "privacy.n2.detail": "基于 Shadow DOM 面板采集，全部统计逻辑在浏览器本机执行",
         "privacy.n3.code": "Export 03",
-        "privacy.n3.title": "浏览器本地存储",
-        "privacy.n3.copy": "只有你能导出或清空",
+        "privacy.n3.title": "浏览器本地保存",
+        "privacy.n3.copy": "记录只存本地，随时导出 / 一键清空",
+        "privacy.n3.detail": "数据存储于浏览器本地存储，仅用户本人可导出或清空",
         "privacy.f1": "观看数据上传请求",
         "privacy.f2": "固定 GM 存储权限",
         "privacy.f3": "开放源代码许可证",
@@ -3805,8 +4039,8 @@
         "support.s3.copy": "When you change browsers, export and import on your own terms — records are merged and sessions de-duplicated.",
         "support.s4.title": "Weekly PNG report",
         "support.s4.copy": "Turns the week's overview, top creator and daily durations into one saveable report.",
-        "privacy.title": "Your data follows exactly one path.",
-        "privacy.copy": "From Bilibili playback events to local storage, and on to the export file you choose to create, the whole path stays inside your browser. The project has no account system, no backend, and never uploads viewing data.",
+        "privacy.title": "Your watch history stays on your own computer",
+        "privacy.copy": "Everything runs locally in your browser, and <strong>no viewing data is ever uploaded</strong>. No server, no account. You keep full control of your data.",
         "privacy.routeAria": "Local data handling path",
         "privacy.platformNote": "Runs only on desktop Chrome or Edge with Tampermonkey installed. Mobile browsers cannot run the script.",
         "faq.title": "Frequently asked",
@@ -3816,16 +4050,20 @@
         "faq.a2": "Install the script in the new environment, then use Import in the panel to pick the JSON file you exported earlier. Records merge in by date. The two machines do not sync automatically.",
         "faq.q3": "Does the script upload my watch data?",
         "faq.a3": "No. The script only reads and writes local storage in your browser. Its one outbound request asks a public Bilibili endpoint for a video title and carries no duration or progress data.",
-        "privacy.server": "Server path not connected",
+        "privacy.server": "Never connects to an external server",
+        "privacy.replay": "Replay data flow",
         "privacy.n1.code": "Source 01",
-        "privacy.n1.title": "Bilibili playback events",
-        "privacy.n1.copy": "Public page and player state",
+        "privacy.n1.title": "Reads the Bilibili player state",
+        "privacy.n1.copy": "Takes only public playback information, never touches account privacy",
+        "privacy.n1.detail": "Reads playback events from the Bilibili page and takes the player's public state",
         "privacy.n2.code": "Local 02",
-        "privacy.n2.title": "Shadow DOM panel",
-        "privacy.n2.copy": "Capture and statistics both run on this machine",
+        "privacy.n2.title": "Computes locally",
+        "privacy.n2.copy": "All statistics run on this machine and are never sent out",
+        "privacy.n2.detail": "Collects through a Shadow DOM panel; every calculation runs in your own browser",
         "privacy.n3.code": "Export 03",
-        "privacy.n3.title": "Browser local storage",
-        "privacy.n3.copy": "Only you can export or clear it",
+        "privacy.n3.title": "Saved in the browser",
+        "privacy.n3.copy": "Records stay local, export or clear them at any time",
+        "privacy.n3.detail": "Data is stored in browser local storage; only you can export or clear it",
         "privacy.f1": "Upload requests for viewing data",
         "privacy.f2": "Fixed GM storage permissions",
         "privacy.f3": "Open-source license",
@@ -3914,12 +4152,43 @@
       }
     };
 
+    // 逐字入场的标题：把文本切成单个字符的 span，每个字符自带递增延迟。
+    // 必须在 applyLang 之后调用 —— applyLang 会重写 textContent，
+    // 切分结果会被清掉。中英文都按字符切，中文一字一格，英文按字母，
+    // 因此英文的延迟步长要小一些，否则整行入场会拖拉。
+    const splitHeadline = () => {
+      document.querySelectorAll(".privacy-headline").forEach((el) => {
+        if (el.dataset.split === "true") return;
+        el.dataset.split = "true";
+        const text = el.textContent;
+        el.textContent = "";
+        const step = document.documentElement.getAttribute("lang") === "en" ? 12 : 34;
+        [...text].forEach((char, index) => {
+          const span = document.createElement("span");
+          span.className = "char";
+          // 空格不占一格动画，但仍要保留宽度
+          span.textContent = char;
+          span.style.setProperty("--char-delay", index * step + "ms");
+          el.appendChild(span);
+        });
+      });
+    };
+
     const applyLang = (next, persist) => {
       lang = next;
       document.documentElement.setAttribute("lang", lang === "zh" ? "zh-CN" : "en");
       if (persist) writeStore(STORE_LANG, lang);
 
-      document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
+      // 绝大多数词条是纯文本，用 textContent 写入（天然免疫注入）。
+      // 只有词典里真正带标记的少数词条（当前仅 privacy.copy 的强调句）用 innerHTML，
+      // 且必须显式声明，避免任何数据驱动的文案走进 innerHTML。
+      const MARKUP_KEYS = new Set(["privacy.copy"]);
+      document.querySelectorAll("[data-i18n]").forEach((el) => {
+        const key = el.dataset.i18n;
+        const value = t(key);
+        if (MARKUP_KEYS.has(key)) el.innerHTML = value;
+        else el.textContent = value;
+      });
       document.querySelectorAll("[data-i18n-aria-label]").forEach((el) => { el.setAttribute("aria-label", t(el.dataset.i18nAriaLabel)); });
       // CSS 气泡的内容来自 data-tip，需随语言一起切换
       document.querySelectorAll("[data-i18n-tip]").forEach((el) => { el.setAttribute("data-tip", t(el.dataset.i18nTip)); });
@@ -3935,6 +4204,11 @@
 
       // 视图区文案随语言重建
       renderView(activeView, "lang");
+
+      // 标题文本刚被重写，需要重新逐字切分（切分结果不跨语言复用）
+      const headline = document.querySelector(".privacy-headline");
+      if (headline) delete headline.dataset.split;
+      splitHeadline();
     };
 
     if (refs.themeToggle) {
@@ -4350,21 +4624,137 @@
       }
     }
 
-    // 隐私路线：进入视口后绿色连线从左向右绘制，三个盒子依次淡入
+    // 隐私路线：进入视口后绿色连线从左向右绘制，三个盒子依次淡入。
+    // 随后光点沿连线走一趟，到第 3 张卡片就消失，不再向右延伸 ——
+    // 这正是「数据只在本机流动」的可视化表达。
     const privacyRoutes = document.querySelectorAll(".privacy-route");
+
     if (privacyRoutes.length) {
+      // 光点从第 1 张卡片的中线出发，走到第 3 张卡片的中线就停 ——
+      // 而不是走完整条连线。这是「数据只在本机三格里流动」的关键表达。
+      //
+      // 必须直接量卡片几何：连线用的是 left/right 百分比，
+      // 而卡片之间有 gap，等分位置和卡片中线并不重合。
+      //
+      // 量法上有一处必须避开的陷阱：隐私区被包在 .reveal 里，而 .reveal
+      // 入场时带 transform: translateY(26px)。**带 transform 的祖先会成为
+      // position:absolute 后代的包含块**，getBoundingClientRect() 的口径
+      // 因此会随入场过渡的进度漂移（实测偏 59px，光点到不了第 3 张卡片）。
+      // offsetLeft / offsetTop 是相对 offsetParent 计算、与祖先变换无关的
+      // 布局坐标，所以一律用它们量。
+      //
+      // 另一个坑：卡片的 offsetParent 是 .route-nodes，而光点的
+      // offsetParent 是 .privacy-route 本身，两者差着一层内边距。
+      // 少补这段偏移，光点会正好停在卡片左边线上、差 39px 到不了中线。
+      const measureFlow = (route) => {
+        const dot = route.querySelector(".flow-dot");
+        const nodes = route.querySelectorAll(".route-node");
+        if (!dot || nodes.length < 2) return;
+
+        const first = nodes[0];
+        const last = nodes[nodes.length - 1];
+        const grid = first.offsetParent;
+
+        // 把卡片相对 .route-nodes 的坐标换算成相对 .privacy-route 的坐标。
+        // 只取一层父级足够：本页卡片就是 .route-nodes 的直接子元素。
+        let biasX = 0;
+        let biasY = 0;
+        if (grid && grid !== route) {
+          biasX = grid.offsetLeft;
+          biasY = grid.offsetTop;
+          const gridParent = grid.offsetParent;
+          if (gridParent && gridParent !== route) {
+            biasX += gridParent.offsetLeft;
+            biasY += gridParent.offsetTop;
+          }
+        }
+
+        // 单列布局下连线改竖，光点也改成纵向流动。
+        // 判据必须用「三张卡片是否横向并排」——
+        // 早期用 top 比较会误判：卡片在网格里垂直居中，
+        // 桌面端第 3 张本就比第 1 张低几像素。
+        const vertical = last.offsetLeft <= first.offsetLeft + 8;
+
+        // 光点由 CSS 钉在容器原点，尺寸 7×7，减半个身位让中心落在中线上
+        const half = dot.offsetWidth / 2;
+
+        // 轴线取第 1 张卡片的中心：桌面端三张卡中线同高，纵向时同列
+        const axisX = biasX + first.offsetLeft + first.offsetWidth / 2 - half;
+        const axisY = biasY + first.offsetTop + first.offsetHeight / 2 - half;
+
+        if (vertical) {
+          // 竖排：x 锁在第 1 张卡片中线，y 从第 1 张走到第 3 张
+          route.style.setProperty("--flow-start-x", Math.round(axisX) + "px");
+          route.style.setProperty("--flow-end-x", Math.round(axisX) + "px");
+          route.style.setProperty("--flow-start-y", Math.round(axisY) + "px");
+          route.style.setProperty("--flow-end-y",
+            Math.round(biasY + last.offsetTop + last.offsetHeight / 2 - half) + "px");
+        } else {
+          // 横排：y 锁在第 1 张卡片中线，x 从第 1 张走到第 3 张
+          route.style.setProperty("--flow-start-x", Math.round(axisX) + "px");
+          route.style.setProperty("--flow-end-x",
+            Math.round(biasX + last.offsetLeft + last.offsetWidth / 2 - half) + "px");
+          route.style.setProperty("--flow-start-y", Math.round(axisY) + "px");
+          route.style.setProperty("--flow-end-y", Math.round(axisY) + "px");
+        }
+      };
+
+      const playFlow = (route) => {
+        const dot = route.querySelector(".flow-dot");
+        if (!dot) return;
+        measureFlow(route);
+        // 重启动画必须去掉类并强制重排，否则同一帧内重新加类不会重播
+        dot.classList.remove("is-flowing");
+        void dot.offsetWidth;
+        dot.classList.add("is-flowing");
+      };
+
+      // 入场：连线画完 + 三张卡片淡入之后再放光点
+      const runIntro = (route) => {
+        route.classList.add("is-drawn");
+        window.setTimeout(() => playFlow(route), 1180);
+      };
+
       if (reduceMotion.matches || !("IntersectionObserver" in window)) {
         privacyRoutes.forEach((route) => route.classList.add("is-drawn"));
       } else {
         const routeObserver = new IntersectionObserver((entries) => {
           entries.forEach((entry) => {
             if (!entry.isIntersecting) return;
-            entry.target.classList.add("is-drawn");
+            runIntro(entry.target);
             routeObserver.unobserve(entry.target);
           });
         }, { threshold: 0.24, rootMargin: "0px 0px -6% 0px" });
         privacyRoutes.forEach((route) => routeObserver.observe(route));
       }
+
+      // 重播按钮 + 卡片 hover 重放 + 技术详情折叠
+      privacyRoutes.forEach((route) => {
+        const replay = route.querySelector(".route-replay");
+        if (replay) {
+          replay.addEventListener("click", () => playFlow(route));
+        }
+
+        route.querySelectorAll(".route-node").forEach((node) => {
+          const face = node.querySelector(".route-node-face");
+          const detail = node.querySelector(".route-detail");
+
+          // 悬停卡片：光点重放到这张卡片为止（第一张就没有位移，等同于就地闪一下）
+          node.addEventListener("pointerenter", () => playFlow(node.closest(".privacy-route") || route));
+
+          if (!face || !detail) return;
+
+          const setOpen = (open) => {
+            node.dataset.open = open ? "true" : "false";
+            face.setAttribute("aria-expanded", String(open));
+            detail.hidden = !open;
+          };
+
+          face.addEventListener("click", () => {
+            setOpen(face.getAttribute("aria-expanded") !== "true");
+          });
+        });
+      });
     }
 
     // 第六屏票根：进入视口后从右侧滑入
