@@ -454,9 +454,11 @@
     }
 
     /* 区块标题：必须小于 h1，否则小标题会压过主标题。
-       目前 h1 上限 4.4rem，h2 上限 3.5rem，形成清晰的 1.26 倍级差。 */
+       目前 h1 上限 4.4rem，h2 上限 3.5rem，形成清晰的 1.26 倍级差。
+       限宽用 em 而非 ch：ch 以数字零宽为基准，中文下仅约汉字的一半，
+       12ch 会被压成每行 3 至 4 字。em 等于一个汉字宽，语义更准。 */
     h2 {
-      max-width: 12ch;
+      max-width: 7em;
       margin-bottom: 0;
       font-size: clamp(2rem, 3.6vw, 3.5rem);
       line-height: 1.16;
@@ -1363,7 +1365,7 @@
     }
 
     .hero-statement strong {
-      max-width: 20ch;
+      max-width: 15em;
       font-family: var(--display);
       font-size: clamp(1.3rem, 2.5vw, 2.35rem);
       font-weight: 500;
@@ -1467,7 +1469,11 @@
     }
 
     .measurement-body h3 {
-      max-width: 22ch;
+      /* CJK 下 ch 单位以数字零宽为基准（约汉字的 0.47 倍），22ch 会把标题挤成
+         每行 3 至 4 字、末尾剩两字孤行。改用 em（等于字号，即一个汉字宽）
+         并让浏览器均衡两行长度，避免末行只有一两个字的孤行。 */
+      max-width: 11em;
+      text-wrap: balance;
     }
 
     .measurement-body p {
@@ -1601,7 +1607,10 @@
 
     .detail-frame figcaption strong {
       display: block;
-      max-width: 17ch;
+      /* em 而非 ch：ch 以数字零宽为基准，中文下只有汉字的一半，
+         17ch 会把 15 字标题断成 7 / 6 / 2，末尾只剩「层。」两字孤行。 */
+      max-width: 9em;
+      text-wrap: balance;
       margin-bottom: 14px;
       font-family: var(--display);
       font-size: clamp(1.3rem, 2vw, 1.8rem);
@@ -1834,7 +1843,11 @@
     }
 
     .destination-main h2 {
-      max-width: 10ch;
+      /* 主区实测可用宽 809px（1440）至 889px（1920），而 10ch 只有 243px，
+         18 字标题被挤成 5 行、每行 3 至 4 字，末行仅剩「底稿。」。
+         改为 9em（等于 9 个汉字宽）并交给 balance 均衡，读起来是完整的两行。 */
+      max-width: 9em;
+      text-wrap: balance;
     }
 
     .destination-main p {
