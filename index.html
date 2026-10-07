@@ -41,6 +41,7 @@
         <a href="#top" data-nav-section="top" data-i18n="nav.overview">概览</a>
         <a href="#records" data-nav-section="records" data-i18n="nav.method">统计口径</a>
         <a href="#privacy" data-nav-section="privacy" data-i18n="nav.privacy">隐私说明</a>
+        <a href="#install" data-nav-section="install" data-i18n="nav.installStep">安装步骤</a>
       </nav>
 
       <span class="header-divider" aria-hidden="true"></span>
@@ -94,7 +95,10 @@
             <a class="button button-secondary" href="https://github.com/Gavin-gwj/bilibili-watch-panel" data-i18n="hero.github">查看 GitHub</a>
           </div>
           <ul class="hero-meta" aria-label="项目信息" data-i18n-aria-label="hero.metaAria">
-            <li>Tampermonkey</li>
+            <li class="hero-meta-tool">
+              <img src="docs/assets/tampermonkey-mark.svg" alt="" width="18" height="18" loading="eager" decoding="async">
+              <span>Tampermonkey</span>
+            </li>
             <li data-i18n="hero.meta.local">本地存储</li>
             <li data-i18n="hero.meta.license">MIT License</li>
             <li>v0.9.1</li>
@@ -472,30 +476,100 @@
       </div>
     </section>
 
-    <section class="install shell" id="install">
-      <div class="destination-plate reveal">
-        <div class="destination-main">
-          <h2 data-i18n="install.title">从今天开始，给自己的观看留一份底稿。</h2>
-          <p data-i18n="install.copy">安装 Tampermonkey，再点击安装用户脚本。打开任意 B 站页面后，右侧会出现可拖动的观看数据入口。</p>
-          <div class="hero-actions">
-            <a class="button button-primary" href="https://raw.githubusercontent.com/Gavin-gwj/bilibili-watch-panel/main/bilibili-watch-panel.user.js" data-i18n="install.cta">获取脚本</a>
-            <a class="button button-secondary" href="https://github.com/Gavin-gwj/bilibili-watch-panel#安装" data-i18n="install.guide">查看安装说明</a>
+    <section class="install shell" id="install" aria-labelledby="installTitle">
+      <div class="install-journey destination-plate reveal">
+        <div class="install-intro">
+          <div class="install-intro-topline">
+            <span class="install-kicker" data-i18n="install.eyebrow">安装路径</span>
+            <span class="install-runtime">
+              <img src="docs/assets/tampermonkey-mark.svg" alt="" width="22" height="22" loading="lazy" decoding="async">
+              <span>Tampermonkey</span>
+            </span>
+          </div>
+          <div class="install-intro-grid">
+            <div class="install-intro-copy">
+              <h2 id="installTitle" data-i18n="install.title">三步装好，让观看记录开始留下来。</h2>
+              <p data-i18n="install.copy">先装浏览器扩展 Tampermonkey，再点击本站的安装脚本。确认一次，打开任意 B 站视频页，右侧就会出现可拖动的观看数据入口。</p>
+              <div class="hero-actions install-actions">
+                <a class="button button-secondary" href="https://www.tampermonkey.net/" target="_blank" rel="noopener noreferrer" data-i18n="install.tm">安装 Tampermonkey</a>
+                <a class="button button-primary" href="https://raw.githubusercontent.com/Gavin-gwj/bilibili-watch-panel/main/bilibili-watch-panel.user.js" data-i18n="install.cta">一键安装脚本</a>
+              </div>
+              <div class="install-trust-line">
+                <span class="install-trust-dot" aria-hidden="true"></span>
+                <span data-i18n="install.trust">脚本运行在浏览器本地，不需要账号，也不会上传观看数据。</span>
+              </div>
+            </div>
+            <figure class="install-art">
+              <img class="install-art-image install-art-image-dark" src="docs/assets/install-tutorial-hero.png" alt="浏览器扩展安装与脚本启用流程示意图" data-i18n-alt="install.artAlt" width="1536" height="1024" loading="eager" decoding="async">
+              <img class="install-art-image install-art-image-light" src="docs/assets/install-tutorial-hero-light.png" alt="" aria-hidden="true" width="1536" height="1024" loading="eager" decoding="async">
+              <figcaption><span data-i18n="install.artCaption">Extension → script → local panel</span></figcaption>
+            </figure>
           </div>
         </div>
 
-        <aside class="destination-side" aria-label="项目终点信息" data-i18n-aria-label="install.sideAria">
-          <div>
-            <div class="destination-code">Destination</div>
-            <div class="destination-name" data-i18n="install.dest">本地观看档案</div>
-            <ul class="destination-meta">
-              <li><span data-i18n="install.m1">运行方式</span><strong>Tampermonkey</strong></li>
-              <li><span data-i18n="install.m2">数据位置</span><strong data-i18n="install.m2v">浏览器本地</strong></li>
-              <li><span data-i18n="install.m3">服务器</span><strong data-i18n="install.m3v">无</strong></li>
-              <li><span data-i18n="install.m4">版本</span><strong>0.9.1</strong></li>
-            </ul>
+        <div class="install-steps" data-install-steps>
+          <div class="install-steps-head">
+            <div>
+              <span class="install-code">Install flow</span>
+              <h3 data-i18n="install.stepsTitle">照着做，半分钟就能开始记录。</h3>
+            </div>
+            <a class="install-guide-link" href="https://github.com/Gavin-gwj/bilibili-watch-panel#安装" target="_blank" rel="noopener noreferrer" data-i18n="install.guide">打开完整安装说明</a>
           </div>
-          <p class="destination-code">Bilibili Watch Panel</p>
-        </aside>
+
+          <ol class="install-step-list" aria-label="安装步骤" data-i18n-aria-label="install.stepsAria">
+            <li class="install-step is-active" data-install-step="1">
+              <button class="install-step-trigger" type="button" aria-pressed="true" data-install-trigger="1">
+                <span class="install-step-no">01</span>
+                <span class="install-step-title" data-i18n="install.step1.title">先安装 Tampermonkey</span>
+                <span class="install-step-arrow" aria-hidden="true">↗</span>
+              </button>
+              <div class="install-step-body">
+                <div class="install-step-visual install-extension-visual">
+                  <img src="docs/assets/tampermonkey-mark.svg" alt="" width="72" height="72" loading="lazy" decoding="async">
+                  <span class="install-visual-caption" data-i18n="install.step1.visual">浏览器扩展</span>
+                </div>
+                <div class="install-step-copy">
+                  <p data-i18n="install.step1.copy">打开 Tampermonkey 官网，按浏览器选择对应版本并完成安装。</p>
+                  <a class="install-inline-link" href="https://www.tampermonkey.net/" target="_blank" rel="noopener noreferrer" data-i18n="install.step1.cta">去官网安装</a>
+                </div>
+              </div>
+            </li>
+
+            <li class="install-step" data-install-step="2">
+              <button class="install-step-trigger" type="button" aria-pressed="false" data-install-trigger="2">
+                <span class="install-step-no">02</span>
+                <span class="install-step-title" data-i18n="install.step2.title">点击本站的一键安装</span>
+                <span class="install-step-arrow" aria-hidden="true">↗</span>
+              </button>
+              <div class="install-step-body">
+                <div class="install-step-visual install-script-visual">
+                  <img src="docs/assets/install-tutorial-confirm.png" alt="Tampermonkey 安装确认页示意图" data-i18n-alt="install.step2.alt" width="1024" height="1024" loading="lazy" decoding="async">
+                </div>
+                <div class="install-step-copy">
+                  <p data-i18n="install.step2.copy">回到本站，点击“ 一键安装脚本 ”。Tampermonkey 会自动打开确认页，点一次安装即可。</p>
+                  <a class="install-inline-link" href="https://raw.githubusercontent.com/Gavin-gwj/bilibili-watch-panel/main/bilibili-watch-panel.user.js" data-i18n="install.step2.cta">立即安装脚本</a>
+                </div>
+              </div>
+            </li>
+
+            <li class="install-step" data-install-step="3">
+              <button class="install-step-trigger" type="button" aria-pressed="false" data-install-trigger="3">
+                <span class="install-step-no">03</span>
+                <span class="install-step-title" data-i18n="install.step3.title">打开 B 站，开始记录</span>
+                <span class="install-step-arrow" aria-hidden="true">↗</span>
+              </button>
+              <div class="install-step-body">
+                <div class="install-step-visual install-panel-visual">
+                  <img src="docs/screenshots/panel-today.png" alt="观看数据面板示例" data-i18n-alt="install.step3.alt" width="688" height="908" loading="lazy" decoding="async">
+                </div>
+                <div class="install-step-copy">
+                  <p data-i18n="install.step3.copy">打开任意 B 站视频页，播放几秒钟，右侧会出现可以拖动的面板入口。</p>
+                  <span class="install-inline-note" data-i18n="install.step3.note">数据只保存在当前浏览器</span>
+                </div>
+              </div>
+            </li>
+          </ol>
+        </div>
       </div>
     </section>
   </main>

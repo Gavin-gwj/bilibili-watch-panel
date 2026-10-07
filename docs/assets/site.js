@@ -84,6 +84,7 @@ const I18N = {
     "nav.overview": "概览",
     "nav.method": "统计口径",
     "nav.privacy": "隐私说明",
+    "nav.installStep": "安装步骤",
     "nav.install": "获取脚本",
     "nav.stars": "GitHub star 数",
     "pref.group": "显示偏好",
@@ -170,10 +171,29 @@ const I18N = {
     "privacy.f1": "观看数据上传请求",
     "privacy.f2": "固定 GM 存储权限",
     "privacy.f3": "开放源代码许可证",
-    "install.title": "从今天开始，给自己的观看留一份底稿。",
-    "install.copy": "安装 Tampermonkey，再点击安装用户脚本。打开任意 B 站页面后，右侧会出现可拖动的观看数据入口。",
-    "install.cta": "获取脚本",
-    "install.guide": "查看安装说明",
+    "install.eyebrow": "安装路径",
+    "install.title": "三步装好，让观看记录开始留下来。",
+    "install.copy": "先装浏览器扩展 Tampermonkey，再点击本站的安装脚本。确认一次，打开任意 B 站视频页，右侧就会出现可拖动的观看数据入口。",
+    "install.tm": "安装 Tampermonkey",
+    "install.cta": "一键安装脚本",
+    "install.trust": "脚本运行在浏览器本地，不需要账号，也不会上传观看数据。",
+    "install.artAlt": "浏览器扩展安装与脚本启用流程示意图",
+    "install.artCaption": "Extension → script → local panel",
+    "install.stepsTitle": "照着做，半分钟就能开始记录。",
+    "install.stepsAria": "安装步骤",
+    "install.guide": "打开完整安装说明",
+    "install.step1.title": "先安装 Tampermonkey",
+    "install.step1.visual": "浏览器扩展",
+    "install.step1.copy": "打开 Tampermonkey 官网，按浏览器选择对应版本并完成安装。",
+    "install.step1.cta": "去官网安装",
+    "install.step2.title": "点击本站的一键安装",
+    "install.step2.alt": "Tampermonkey 安装确认页示意图",
+    "install.step2.copy": "回到本站，点击“一键安装脚本”。Tampermonkey 会自动打开确认页，点一次安装即可。",
+    "install.step2.cta": "立即安装脚本",
+    "install.step3.title": "打开 B 站，开始记录",
+    "install.step3.alt": "观看数据面板示例",
+    "install.step3.copy": "打开任意 B 站视频页，播放几秒钟，右侧会出现可以拖动的面板入口。",
+    "install.step3.note": "数据只保存在当前浏览器",
     "install.sideAria": "项目终点信息",
     "install.code": "Destination",
     "install.dest": "本地观看档案",
@@ -207,6 +227,7 @@ const I18N = {
     "nav.overview": "Overview",
     "nav.method": "Method",
     "nav.privacy": "Privacy",
+    "nav.installStep": "Install",
     "nav.install": "Get script",
     "nav.stars": "GitHub star count",
     "pref.group": "Display preferences",
@@ -294,10 +315,29 @@ const I18N = {
     "privacy.f1": "Upload requests for viewing data",
     "privacy.f2": "Fixed GM storage permissions",
     "privacy.f3": "Open-source license",
-    "install.title": "Start keeping a draft of your own watching today.",
-    "install.copy": "Install Tampermonkey, then click to install the userscript. On any Bilibili page a draggable watch-data entry appears on the right.",
-    "install.cta": "Get script",
-    "install.guide": "Read the install guide",
+    "install.eyebrow": "Install path",
+    "install.title": "Three steps, then your watch history starts to stay with you.",
+    "install.copy": "Install the Tampermonkey browser extension first, then click the script installer here. Confirm once, open any Bilibili video page, and the draggable watch panel appears on the right.",
+    "install.tm": "Install Tampermonkey",
+    "install.cta": "Install script",
+    "install.trust": "Runs in this browser. No account required, and no watch data is uploaded.",
+    "install.artAlt": "Illustration of the browser extension and userscript installation flow",
+    "install.artCaption": "Extension → script → local panel",
+    "install.stepsTitle": "Follow the path and start recording in under a minute.",
+    "install.stepsAria": "Installation steps",
+    "install.guide": "Open the full install guide",
+    "install.step1.title": "Install Tampermonkey first",
+    "install.step1.visual": "Browser extension",
+    "install.step1.copy": "Open the Tampermonkey site, choose the version for your browser, and finish the extension install.",
+    "install.step1.cta": "Install from the site",
+    "install.step2.title": "Click the one-click installer",
+    "install.step2.alt": "Illustration of the Tampermonkey install confirmation page",
+    "install.step2.copy": "Return here and click “Install script”. Tampermonkey opens a confirmation page; confirm once to finish.",
+    "install.step2.cta": "Install the script",
+    "install.step3.title": "Open Bilibili and start watching",
+    "install.step3.alt": "Sample watch-data panel",
+    "install.step3.copy": "Open any Bilibili video page and play for a few seconds. The draggable panel entry appears on the right.",
+    "install.step3.note": "Data stays in this browser",
     "install.sideAria": "Project destination facts",
     "install.code": "Destination",
     "install.dest": "Local watch archive",
@@ -371,6 +411,12 @@ const pick = (node) => (node && typeof node === "object" ? (node[lang] || node.z
 const themeLabelKey = () => (theme === "light" ? "pref.themeToDark" : "pref.themeToLight");
 
 const applyTheme = (next, persist) => {
+  if (persist && !reduceMotion.matches) {
+    document.documentElement.classList.remove("theme-transition");
+    void document.documentElement.offsetWidth;
+    document.documentElement.classList.add("theme-transition");
+    window.setTimeout(() => document.documentElement.classList.remove("theme-transition"), 560);
+  }
   theme = next;
   document.documentElement.setAttribute("data-theme", theme);
   if (persist) writeStore(STORE_THEME, theme);
@@ -931,6 +977,42 @@ if (destinationPlates.length) {
   }
 }
 
+// 安装教程：数字步骤保持可点击、可键盘操作，并把当前步骤的视觉重点交给用户。
+const installSteps = document.querySelector("[data-install-steps]");
+if (installSteps) {
+  const stepItems = Array.from(installSteps.querySelectorAll("[data-install-step]"));
+  const stepButtons = Array.from(installSteps.querySelectorAll("[data-install-trigger]"));
+  const setInstallStep = (step, shouldScroll = false) => {
+    stepItems.forEach((item) => {
+      const active = item.dataset.installStep === String(step);
+      item.classList.toggle("is-active", active);
+    });
+    stepButtons.forEach((button) => {
+      const active = button.dataset.installTrigger === String(step);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    if (shouldScroll) {
+      const target = stepItems.find((item) => item.dataset.installStep === String(step));
+      target?.scrollIntoView({ behavior: reduceMotion.matches ? "auto" : "smooth", block: "nearest", inline: "nearest" });
+    }
+  };
+
+  stepButtons.forEach((button) => {
+    button.addEventListener("click", () => setInstallStep(button.dataset.installTrigger, true));
+    button.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+      event.preventDefault();
+      const current = stepButtons.indexOf(button);
+      const next = event.key === "ArrowRight"
+        ? (current + 1) % stepButtons.length
+        : (current - 1 + stepButtons.length) % stepButtons.length;
+      stepButtons[next].focus();
+      setInstallStep(stepButtons[next].dataset.installTrigger, true);
+    });
+  });
+  setInstallStep("1");
+}
+
 // 先落地主题与语言（不带持久化，避免覆盖用户已有选择），再渲染视图
 applyTheme(theme, false);
 applyLang(lang, false);
@@ -1013,6 +1095,34 @@ const measureIllustration = () => {
 measureIllustration();
 window.addEventListener("resize", measureIllustration, { passive: true });
 window.addEventListener("load", measureIllustration);
+
+// 原生 fullpage 节奏：CSS scroll-snap 负责磁吸，IntersectionObserver 只负责 cross-fade 的当前屏状态。
+const initFullpageSnap = () => {
+  const sections = Array.from(document.querySelectorAll("main > section"));
+  if (!sections.length) return;
+
+  document.documentElement.dataset.scrollMode = "snap";
+  const setActive = (section) => {
+    sections.forEach((item) => item.classList.toggle("is-crossfade-active", item === section));
+  };
+  setActive(sections[0]);
+
+  if (reduceMotion.matches || !("IntersectionObserver" in window)) return;
+  document.documentElement.dataset.crossfade = "ready";
+
+  const observer = new IntersectionObserver((entries) => {
+    const visible = entries
+      .filter((entry) => entry.isIntersecting)
+      .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (visible) setActive(visible.target);
+  }, {
+    threshold: [0.18, 0.36, 0.56, 0.76],
+    rootMargin: "-8% 0px -8% 0px"
+  });
+  sections.forEach((section) => observer.observe(section));
+};
+
+initFullpageSnap();
 
 // 固定种子让同一条示例评论始终使用同一头像，无需读取或保存用户数据。
 const avatarForSeed = (seed) => {

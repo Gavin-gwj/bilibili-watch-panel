@@ -2262,7 +2262,7 @@ html[data-theme="light"] .faq {
 }
 
 .install {
-  padding-top: var(--section-gap);
+  padding-top: clamp(56px, 5.2vw, 84px);
 
   padding-bottom: 0;
 }
@@ -3338,6 +3338,467 @@ html:not(.js-ready) .pref-group, html:not(.js-ready) .view-tabs, html:not(.js-re
 }
 
 .preview-slot:not(.is-front) .preview-caption { visibility: hidden; }
+
+/* Installation tutorial: a lighter editorial path that keeps the original links and local-first message. */
+.hero-meta-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.hero-meta-tool img {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: 5px;
+  filter: drop-shadow(0 4px 10px rgba(255, 92, 138, 0.22));
+}
+
+.install-journey {
+  display: block;
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 30px 90px -50px var(--shadow-4);
+}
+
+.install-intro {
+  position: relative;
+  padding: clamp(18px, 2vw, 26px) clamp(26px, 4.2vw, 62px);
+  background:
+    radial-gradient(circle at 80% 10%, var(--glow-b), transparent 28%),
+    linear-gradient(135deg, var(--surface) 0%, var(--fill-1) 58%, var(--fill-2) 100%);
+}
+
+.install-intro-topline,
+.install-steps-head,
+.install-runtime,
+.install-trust-line {
+  display: flex;
+  align-items: center;
+}
+
+.install-intro-topline {
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: clamp(14px, 1.4vw, 20px);
+}
+
+.install-kicker,
+.install-code {
+  color: var(--muted);
+  font-family: var(--measure);
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.install-runtime {
+  gap: 8px;
+  color: var(--enamel);
+  font-family: var(--measure);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.install-runtime img {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  filter: drop-shadow(0 5px 14px rgba(255, 92, 138, 0.22));
+}
+
+.install-intro-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr);
+  align-items: center;
+  gap: clamp(24px, 3vw, 48px);
+}
+
+.install-intro-copy h2 {
+  max-width: 17ch;
+  margin: 0;
+  color: var(--enamel);
+  font-family: var(--display);
+  font-size: clamp(1.9rem, 3vw, 2.85rem);
+  font-weight: 400;
+  line-height: 1.16;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+}
+
+.install-intro-copy > p {
+  max-width: 45rem;
+  margin: clamp(16px, 2vw, 22px) 0 0;
+  color: var(--muted);
+  font-size: clamp(0.92rem, 1.4vw, 1.02rem);
+  line-height: 1.9;
+}
+
+.install-actions {
+  margin-top: clamp(18px, 2vw, 24px);
+  flex-wrap: wrap;
+}
+
+.install-actions .button {
+  min-height: 48px;
+}
+
+.install-trust-line {
+  gap: 9px;
+  margin-top: 20px;
+  color: var(--meta-dim);
+  font-family: var(--measure);
+  font-size: 0.68rem;
+  letter-spacing: 0.045em;
+  line-height: 1.65;
+}
+
+.install-trust-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--route);
+  box-shadow: 0 0 0 5px var(--route-halo);
+}
+
+.install-art {
+  position: relative;
+  min-height: clamp(200px, 18vw, 260px);
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bezel);
+  box-shadow: 0 24px 50px -36px var(--shadow-4);
+  isolation: isolate;
+}
+
+.install-art::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(90deg, rgba(8, 9, 10, 0.08), rgba(8, 9, 10, 0.38));
+  content: "";
+  pointer-events: none;
+}
+
+.install-art img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: center;
+  filter: saturate(0.88) contrast(1.04);
+  transition: opacity 520ms var(--ease-out), transform 900ms var(--ease-out), filter 900ms var(--ease-out);
+}
+
+.install-art-image {
+  position: absolute;
+  inset: 0;
+}
+
+.install-art-image-dark { opacity: 1; }
+.install-art-image-light { opacity: 0; }
+
+html[data-theme="light"] .install-art-image-dark { opacity: 0; }
+html[data-theme="light"] .install-art-image-light { opacity: 1; }
+}
+
+.install-journey:hover .install-art img {
+  transform: scale(1.035);
+  filter: saturate(1) contrast(1.06);
+}
+
+.install-art figcaption {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  z-index: 2;
+  color: rgba(251, 248, 241, 0.8);
+  font-family: var(--measure);
+  font-size: 0.65rem;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.install-steps {
+  padding: clamp(20px, 2.4vw, 32px) clamp(26px, 4.2vw, 62px) clamp(24px, 3.2vw, 38px);
+  border-top: 1px solid var(--line);
+  background: var(--fill-1);
+}
+
+.install-steps-head {
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.install-steps-head h3 {
+  margin: 9px 0 0;
+  color: var(--enamel);
+  font-size: clamp(1.15rem, 2vw, 1.55rem);
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.install-guide-link,
+.install-inline-link {
+  color: var(--signal-text);
+  font-family: var(--measure);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  transition: color 220ms var(--ease-out), transform 220ms var(--ease-out);
+}
+
+.install-guide-link::after,
+.install-inline-link::after {
+  display: inline-block;
+  margin-left: 7px;
+  content: "↗";
+  transition: transform 220ms var(--ease-out);
+}
+
+.install-guide-link:hover,
+.install-guide-link:focus-visible,
+.install-inline-link:hover,
+.install-inline-link:focus-visible {
+  color: var(--signal-text-hi);
+}
+
+.install-guide-link:hover::after,
+.install-guide-link:focus-visible::after,
+.install-inline-link:hover::after,
+.install-inline-link:focus-visible::after {
+  transform: translate(2px, -2px);
+}
+
+.install-step-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.install-step {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  transition: border-color 280ms var(--ease-out), background 280ms var(--ease-out), transform 280ms var(--ease-out), box-shadow 280ms var(--ease-out);
+}
+
+.install-step:hover,
+.install-step:focus-within,
+.install-step.is-active {
+  border-color: var(--line-strong);
+  background: var(--fill-2);
+  box-shadow: 0 18px 38px -30px var(--shadow-4);
+  transform: translateY(-3px);
+}
+
+.install-step-trigger {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 62px;
+  padding: 14px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--enamel);
+  text-align: left;
+  cursor: pointer;
+}
+
+.install-step-trigger:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -3px;
+}
+
+.install-step-no {
+  color: var(--signal-text);
+  font-family: var(--measure);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+}
+
+.install-step-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.install-step-arrow {
+  color: var(--muted);
+  font-size: 1rem;
+  transition: color 220ms var(--ease-out), transform 220ms var(--ease-out);
+}
+
+.install-step.is-active .install-step-arrow {
+  color: var(--signal-text);
+  transform: translate(2px, -2px);
+}
+
+.install-step-body {
+  display: grid;
+  grid-template-columns: 106px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  min-height: 112px;
+  padding: 10px;
+}
+
+.install-step-visual {
+  display: grid;
+  place-items: center;
+  width: 82px;
+  height: 92px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bezel);
+}
+
+.install-extension-visual {
+  gap: 12px;
+  background: radial-gradient(circle at 50% 30%, var(--glow-c), transparent 62%), var(--bezel);
+}
+
+.install-extension-visual img {
+  width: 60px;
+  height: 60px;
+  border-radius: 14px;
+  filter: drop-shadow(0 12px 20px rgba(255, 92, 138, 0.28));
+}
+
+.install-visual-caption {
+  color: var(--muted);
+  font-family: var(--measure);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.install-script-visual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(0.84) contrast(1.05);
+}
+
+.install-panel-visual {
+  align-items: start;
+  background: var(--preview-ground);
+}
+
+.install-panel-visual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 16%;
+  filter: saturate(0.88) contrast(1.02);
+}
+
+.install-step-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.65;
+}
+
+.install-inline-link,
+.install-inline-note {
+  display: inline-block;
+  margin-top: 14px;
+}
+
+.install-inline-note {
+  color: var(--route-text);
+  font-family: var(--measure);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+}
+
+html[data-theme="light"] .install-intro {
+  background:
+    radial-gradient(circle at 84% 8%, rgba(214, 36, 95, 0.11), transparent 30%),
+    linear-gradient(135deg, #ffffff 0%, #faf9f6 62%, #f1efe8 100%);
+}
+
+html[data-theme="light"] .install-art::after {
+  background: linear-gradient(90deg, rgba(8, 9, 10, 0.02), rgba(8, 9, 10, 0.34));
+}
+
+html[data-theme="light"] .install-art figcaption {
+  color: rgba(20, 22, 26, 0.78);
+}
+
+@media (max-width: 980px) {
+  .install-intro-grid { grid-template-columns: 1fr; }
+  .install-intro-copy h2 { max-width: 15ch; }
+  .install-art { min-height: min(42vw, 300px); }
+}
+
+@media (max-width: 760px) {
+  .install-steps-head { align-items: flex-start; flex-direction: column; }
+  .install-step-list { grid-template-columns: 1fr; }
+  .install-intro { padding: 18px 20px; }
+  .install-intro-grid { gap: 18px; }
+  .install-art { min-height: 150px; }
+  .install-step-body { min-height: 126px; }
+}
+
+@media (max-width: 560px) {
+  .install-intro-topline { align-items: flex-start; flex-direction: column; }
+  .install-intro-copy h2 { font-size: clamp(1.9rem, 9vw, 2.7rem); }
+  .install-intro-copy > p { font-size: 0.9rem; line-height: 1.85; }
+  .install-actions { flex-direction: column; align-items: stretch; }
+  .install-actions .button { width: 100%; }
+  .install-art { min-height: min(36vw, 150px); }
+  .install-step-body { grid-template-columns: 90px minmax(0, 1fr); gap: 12px; padding: 14px; }
+  .install-step-visual { width: 90px; height: 112px; }
+  .install-extension-visual img { width: 52px; height: 52px; }
+  .install-step-copy p { font-size: 0.8rem; }
+}
+
+@media (max-width: 760px) {
+  /* 手机端保留一张展开卡，步骤按钮承担导航作用，避免教程无限拉长。 */
+  .install-step:not(.is-active) .install-step-body { display: none; }
+  .install-step.is-active .install-step-body { display: grid; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .install-art img,
+  .install-step,
+  .install-step-arrow,
+  .install-guide-link::after,
+  .install-inline-link::after { transition: none; }
+}
+
+html.theme-transition,
+html.theme-transition body,
+html.theme-transition body::before,
+html.theme-transition body::after,
+html.theme-transition .site-header,
+html.theme-transition .install-journey,
+html.theme-transition .install-step,
+html.theme-transition .install-art,
+html.theme-transition .install-art::after,
+html.theme-transition .button,
+html.theme-transition .hero-meta-tool img {
+  transition: background-color 520ms var(--ease-out), color 520ms var(--ease-out), border-color 520ms var(--ease-out), box-shadow 520ms var(--ease-out), opacity 520ms var(--ease-out), filter 520ms var(--ease-out);
+}
 .privacy-headline .char { white-space: pre; }
 
 /* Selected concept: Editorial Product Stage. The real panel screenshot carries
@@ -3682,5 +4143,50 @@ html:not(.js-ready) .departure-board[data-showcase-style="editorial"] .view-tabs
   body::before {
     animation: none;
     transform: none;
+  }
+}
+
+/* Native fullpage rhythm: sections magnetize to the viewport while long sections keep their own content height. */
+html[data-scroll-mode="snap"] {
+  scroll-snap-type: y mandatory;
+  scroll-padding-top: 80px;
+}
+
+html[data-scroll-mode="snap"] main > section {
+  min-height: calc(100svh - 80px);
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+/* Records and privacy contain more information than one viewport; they remain internally scrollable between snap points. */
+html[data-scroll-mode="snap"] main > section#records,
+html[data-scroll-mode="snap"] main > section#privacy {
+  scroll-snap-stop: normal;
+}
+
+html[data-scroll-mode="snap"][data-crossfade="ready"] main > section {
+  opacity: 0.46;
+  transition: opacity 620ms var(--ease-out);
+}
+
+html[data-scroll-mode="snap"][data-crossfade="ready"] main > section.is-crossfade-active {
+  opacity: 1;
+}
+
+@media (hover: none), (pointer: coarse) {
+  html[data-scroll-mode="snap"] {
+    scroll-snap-type: y proximity;
+  }
+}
+
+@media (max-width: 760px) {
+  html[data-scroll-mode="snap"] main > section {
+    min-height: calc(100svh - 68px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-scroll-mode="snap"][data-crossfade="ready"] main > section {
+    transition: none;
   }
 }
