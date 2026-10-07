@@ -15,7 +15,8 @@
 </p>
 
 <p align="center">
-  <a href="https://gavin-gwj.github.io/bilibili-watch-panel/">在线展示</a> ·
+  <a href="https://blwatchtime.dpdns.org/">在线展示</a> ·
+  <a href="https://gavin-gwj.github.io/bilibili-watch-panel/">GitHub Pages 镜像</a> ·
   <a href="https://bilibili-watch-panel.liuyigavin2025.workers.dev">备用展示地址</a> ·
   <a href="./bilibili-watch-panel.user.js">安装脚本</a> ·
   <a href="./CHANGELOG.md">版本记录</a>
