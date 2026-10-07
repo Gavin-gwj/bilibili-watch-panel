@@ -3303,6 +3303,13 @@ html:not(.js-ready) .pref-group, html:not(.js-ready) .view-tabs, html:not(.js-re
   .footer-links a { font-size: .84rem; min-height: 44px; }
 }
 @media (max-width: 560px) {
+  /* 620 断点写在本块之后，同特异性下它的 2 列规则会盖掉 site.css:3049 的 1 列规则，
+     导致 560px 及以下仍是 2 列（实测 560/390 都是 2 列，与「手机单列」契约不符）。
+     这里重申一次单列语义，把窄屏拉回来。 */
+  .support-strip { grid-template-columns: 1fr; }
+  .support-item { border-right: 0; border-bottom: 1px solid var(--line); }
+  .support-item:last-child { border-bottom: 0; }
+  .support-item:nth-last-child(-n+2) { border-bottom: 1px solid var(--line); }
   .brand-text { display: none; }
   .brand-abbr { display: inline; font-family: var(--measure); font-weight: 700; font-size: 1rem; letter-spacing: .05em; }
   .brand { gap: 8px; }

@@ -369,7 +369,6 @@ const writeStore = (key, value) => {
   try { window.localStorage.setItem(key, value); } catch {}
 };
 
-const prefersLight = window.matchMedia("(prefers-color-scheme: light)");
 const pickLang = () => {
   const saved = readStore(STORE_LANG);
   if (saved === "zh" || saved === "en") return saved;
@@ -378,7 +377,8 @@ const pickLang = () => {
 };
 
 let theme = readStore(STORE_THEME);
-if (theme !== "dark" && theme !== "light") theme = prefersLight.matches ? "light" : "dark";
+// 站点默认暗色：只有用户显式切过浅色才用浅色，不跟随系统
+if (theme !== "light") theme = "dark";
 let lang = pickLang();
 
 const refs = {
@@ -506,13 +506,6 @@ if (refs.themeToggle) {
 if (refs.langToggle) {
   refs.langToggle.addEventListener("click", () => {
     applyLang(lang === "zh" ? "en" : "zh", true);
-  });
-}
-if (prefersLight.addEventListener) {
-  prefersLight.addEventListener("change", (event) => {
-    // 只在用户没手动选过主题时跟随系统
-    if (readStore(STORE_THEME) !== null) return;
-    applyTheme(event.matches ? "light" : "dark", false);
   });
 }
 
