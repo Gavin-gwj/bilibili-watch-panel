@@ -1017,6 +1017,31 @@ if (installSteps) {
 applyTheme(theme, false);
 applyLang(lang, false);
 
+// 安装教程的深浅两张插画叠在同一容器里靠 opacity 切换，浏览器会无视
+// loading="lazy" 把两张都拉下来，而每张原图接近 2 MB —— 等于每个访客白下
+// 一张永远看不见的图。这里改成按当前主题决定给谁设 src，另一张永不下载。
+//
+// 判断依据是 data-theme 而不是 opacity：主题属性一变 MutationObserver 立刻
+// 回调，此时 520ms 的 opacity 过渡还没开始，按 opacity 判断会读到切换前的
+// 旧值，导致切过去的那张永远不加载。
+const themeArt = document.querySelectorAll("img[data-theme-art]");
+const loadThemeArt = () => {
+  const isLight = document.documentElement.getAttribute("data-theme") === "light";
+  themeArt.forEach((img) => {
+    const wanted = img.classList.contains("install-art-image-light") === isLight;
+    if (!wanted) return;
+    const pending = img.dataset.src;
+    if (pending && img.getAttribute("src") !== pending) img.setAttribute("src", pending);
+  });
+};
+if (themeArt.length) {
+  loadThemeArt();
+  new MutationObserver(loadThemeArt).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-theme"]
+  });
+}
+
 const starChip = document.querySelector("[data-stars]");
 if (starChip) {
   const renderStars = (value) => {
